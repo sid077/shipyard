@@ -8,13 +8,18 @@ from pydantic import ValidationError
 
 from shipyard.contracts import (
     Backlog,
-    DesignSpec,
+    ColorRoles,
+    CopyDeck,
+    CopyEntry,
     MonetizationPlan,
     Opportunity,
     PRD,
     Ticket,
+    UISpec,
+    UXSpec,
     Verdict,
     parse_json_blob,
+    validate_design_bundle,
 )
 
 
@@ -50,23 +55,135 @@ def test_prd_requires_a_p0_and_unique_ids():
         PRD.model_validate(data)
 
 
-def test_design_links_must_resolve():
-    data = fx.design().model_dump()
-    data["primary_flow"] = ["split", "nonexistent"]
-    with pytest.raises(ValidationError, match="unknown screen"):
-        DesignSpec.model_validate(data)
+def test_ux_references_must_resolve():
+    data = fx.ux().model_dump()
+    data["primary_flow"] = "a_flow_that_does_not_exist"
+    with pytest.raises(ValidationError, match="primary_flow"):
+        UXSpec.model_validate(data)
 
-    data = fx.design().model_dump()
+    data = fx.ux().model_dump()
+    data["flows"][0]["steps"] = ["split", "ghost"]
+    with pytest.raises(ValidationError, match="unknown screen"):
+        UXSpec.model_validate(data)
+
+    data = fx.ux().model_dump()
     data["screens"][0]["navigates_to"] = ["ghost"]
     with pytest.raises(ValidationError, match="unknown screen"):
-        DesignSpec.model_validate(data)
+        UXSpec.model_validate(data)
 
 
-def test_design_tokens_must_be_hex():
-    data = fx.design().model_dump()
-    data["tokens"]["color_primary"] = "blue"
+def test_every_screen_must_declare_a_default_state():
+    data = fx.ux().model_dump()
+    data["screens"][0]["states"] = [
+        {"name": "error", "trigger": "t", "renders": "r", "copy_key": None}
+    ]
+    with pytest.raises(ValidationError, match="default"):
+        UXSpec.model_validate(data)
+
+
+def test_a_palette_that_fails_contrast_is_rejected():
+    """The centrepiece gate: bad colour choices fail before code is written."""
+    good = fx.PALETTE.model_dump()
+
+    # Muted text is still text - it gets no discount.
+    with pytest.raises(ValidationError, match="muted text on background"):
+        ColorRoles.model_validate({**good, "text_muted": "#a8b0bb"})
+
+    # A pale primary cannot carry a white label.
+    with pytest.raises(ValidationError, match="button label on primary"):
+        ColorRoles.model_validate({**good, "primary": "#9ecbff"})
+
+    # The pressed state is checked too, not just the resting one.
+    with pytest.raises(ValidationError, match="pressed primary"):
+        ColorRoles.model_validate({**good, "primary_pressed": "#cfe4ff"})
+
+    # A border nobody can see is not a border.
+    with pytest.raises(ValidationError, match="invisible"):
+        ColorRoles.model_validate({**good, "border": good["surface"]})
+
+
+def test_the_error_names_the_ratio_it_achieved_so_a_role_can_act_on_it():
+    with pytest.raises(ValidationError) as caught:
+        ColorRoles.model_validate({**fx.PALETTE.model_dump(), "text": "#9aa0a6"})
+    message = str(caught.value)
+    assert ":1" in message and "needs at least 4.5:1" in message
+
+
+def test_type_scale_must_be_a_usable_ramp():
+    data = fx.ui().model_dump()
+    data["type_scale"] = list(reversed(data["type_scale"]))
+    with pytest.raises(ValidationError, match="smallest to largest"):
+        UISpec.model_validate(data)
+
+    # Shrink the two smallest rungs together so the ramp stays ordered and the
+    # only thing wrong is that body is now fine print.
+    data = fx.ui().model_dump()
+    next(s for s in data["type_scale"] if s["name"] == "caption")["size"] = 11
+    body = next(s for s in data["type_scale"] if s["name"] == "body")
+    body["size"] = 12
+    body["line_height"] = 18
+    with pytest.raises(ValidationError, match="at least 15pt"):
+        UISpec.model_validate(data)
+
+    # One size at two weights is a real rung, not a duplicate.
+    assert UISpec.model_validate(fx.ui().model_dump())
+
+
+def test_cramped_line_height_is_rejected():
+    data = fx.ui().model_dump()
+    next(s for s in data["type_scale"] if s["name"] == "body")["line_height"] = 17
+    with pytest.raises(ValidationError, match="legible"):
+        UISpec.model_validate(data)
+
+
+def test_touch_targets_below_the_platform_minimum_are_rejected():
+    data = fx.ui().model_dump()
+    data["min_touch_target"] = 32
     with pytest.raises(ValidationError):
-        DesignSpec.model_validate(data)
+        UISpec.model_validate(data)
+
+
+def test_a_screen_cannot_compose_a_component_that_does_not_exist():
+    data = fx.ui().model_dump()
+    data["screens"][0]["sections"][0]["component"] = "Carousel"
+    with pytest.raises(ValidationError, match="not in the inventory"):
+        UISpec.model_validate(data)
+
+
+def test_placeholder_copy_is_rejected():
+    entries = {k: v.model_dump() for k, v in fx.copy_deck().entries.items()}
+    for placeholder in ("[CTA]", "TODO: write this", "Lorem ipsum dolor sit"):
+        bad = {**entries, "split.cta": {"text": placeholder, "context": "c", "max_chars": 40}}
+        with pytest.raises(ValidationError, match="placeholders"):
+            CopyDeck.model_validate({"entries": bad})
+
+
+def test_copy_that_overflows_its_own_ceiling_is_rejected():
+    with pytest.raises(ValidationError, match="max_chars"):
+        CopyEntry(text="A label far too long for this button", context="c", max_chars=12)
+
+
+def test_the_design_bundle_cross_checks_its_seams(tmp_path):
+    fx.ux().save(tmp_path)
+    fx.ui().save(tmp_path)
+    fx.copy_deck().save(tmp_path)
+    assert validate_design_bundle(tmp_path) == []
+
+    # A copy key referenced by the UI but never written.
+    ui = fx.ui().model_dump()
+    ui["screens"][0]["sections"][0]["copy_key"] = "split.subtitle"
+    UISpec.model_validate(ui).save(tmp_path)
+    assert any("split.subtitle" in p for p in validate_design_bundle(tmp_path))
+
+    # A screen composed but never specified.
+    fx.ux().save(tmp_path)
+    ui = fx.ui().model_dump()
+    ui["screens"].append(
+        {"screen_id": "settings", "sections": [{"component": "Card", "copy_key": None, "notes": "prefs"}]}
+    )
+    UISpec.model_validate(ui).save(tmp_path)
+    problems = validate_design_bundle(tmp_path)
+    assert any("settings" in p and "does not specify" in p for p in problems)
 
 
 def test_backlog_rejects_dependency_cycles_and_dangling_deps():

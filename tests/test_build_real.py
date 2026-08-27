@@ -13,6 +13,7 @@ ticket's change really passes typecheck, lint, formatting and Jest.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from pathlib import Path
 
@@ -87,7 +88,17 @@ def test_a_real_backlog_builds_a_green_app(tmp_path: Path):
     app = project_dir / "app"
     repo = AppRepo.open(app)
     assert not repo.git.is_dirty()
-    # The product config was really applied to the shipped app.
-    assert fx.design().app_name in (app / "product.json").read_text()
+
+    # The design bundle really reached the shipped app.
+    assert fx.ui().app_name in (app / "product.json").read_text()
+    tokens = (app / "src" / "theme" / "tokens.generated.ts").read_text()
+    assert fx.ui().colors.primary in tokens
+    assert "bodyStrong" in tokens
+    assert json.loads((app / "copy.json").read_text())["entries"]["split.cta"]["text"]
+
+    # The design system is present for engineers to compose from.
+    assert (app / "src" / "ui" / "index.ts").is_file()
+    assert (app / "src" / "app" / "__gallery.tsx").is_file()
+
     for ticket in ("t_01", "t_02", "t_03"):
         assert (app / "src" / "features" / f"{ticket}.ts").is_file()

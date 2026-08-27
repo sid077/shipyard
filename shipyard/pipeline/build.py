@@ -24,11 +24,13 @@ from ..contracts import (
     Architecture,
     Backlog,
     BuildReport,
-    DesignSpec,
+    CopyDeck,
     Idea,
     MonetizationPlan,
     PRD,
     Ticket,
+    UISpec,
+    UXSpec,
     TicketOutcome,
     Verdict,
     coerce_verdict,
@@ -68,7 +70,7 @@ class Build(Stage):
     key = "s60_build"
     title = "Build"
     owner_role = "dev"
-    requires = (Idea, PRD, DesignSpec, Architecture, Backlog, MonetizationPlan)
+    requires = (Idea, PRD, UXSpec, UISpec, CopyDeck, Architecture, Backlog, MonetizationPlan)
     outputs = (BuildReport,)
     dod = """
 - Every ticket in the backlog reached `merged`.
@@ -440,7 +442,9 @@ class Build(Stage):
 
     def _ticket_brief(self, ctx: StageContext, ticket: Ticket) -> str:
         prd = PRD.load(ctx.project_dir)
-        design = DesignSpec.load(ctx.project_dir)
+        ux = UXSpec.load(ctx.project_dir)
+        ui = UISpec.load(ctx.project_dir)
+        copy = CopyDeck.load(ctx.project_dir)
         arch = Architecture.load(ctx.project_dir)
         monetization = MonetizationPlan.load(ctx.project_dir)
 
@@ -456,12 +460,39 @@ class Build(Stage):
         )
         screens = "\n".join(
             f"| `{s.id}` | `{s.route}` | {s.purpose} | "
-            f"{s.requires_entitlement or '-'} | {', '.join(s.states)} |"
-            for s in design.screens
+            f"{s.requires_entitlement or '-'} | {', '.join(st.name for st in s.states)} |"
+            for s in ux.screens
+        )
+        states = "\n".join(
+            f"- **{s.id} / {st.name}** - {st.trigger}: renders {st.renders}"
+            + (f' (copy `{st.copy_key}`: "{copy.entries[st.copy_key].text}")'
+               if st.copy_key and st.copy_key in copy.entries else "")
+            for s in ux.screens
+            for st in s.states
+        )
+        components = "\n".join(
+            f"- `{c.name}` - {c.purpose}; variants {', '.join(c.variants)}; "
+            f"states {', '.join(c.states)}"
+            for c in ui.components
+        )
+        compositions = "\n".join(
+            f"- **{sc.screen_id}**: "
+            + " → ".join(
+                f"{sec.component}"
+                + (f'("{copy.entries[sec.copy_key].text}")'
+                   if sec.copy_key and sec.copy_key in copy.entries else "")
+                for sec in sc.sections
+            )
+            for sc in ui.screens
+        )
+        transitions = "\n".join(
+            f"- `{t.name}` - {t.describes}: {t.duration_ms}ms, {t.easing}"
+            for t in ux.transitions
         )
         modules = "\n".join(f"- `{m.path}` - {m.responsibility}" for m in arch.modules)
         feature_keys = sorted({f for fs in monetization.entitlements.values() for f in fs})
 
+        loading = ux.loading_strategy
         return f"""## Ticket {ticket.id}: {ticket.title}
 
 {ticket.description}
@@ -486,6 +517,36 @@ it causes a merge conflict that costs the team a cycle.
 | Screen | Route | Purpose | Entitlement | States |
 |---|---|---|---|---|
 {screens}
+
+### Every state these screens can be in
+
+{states}
+
+A state you do not build is a bug that ships. Build the empty, loading and error
+states listed above, not only the default one.
+
+### The component inventory — compose from this, do not invent
+
+{components}
+
+Import from `@/ui`. If a screen genuinely needs something the inventory lacks,
+add it to `src/ui/` as a reusable component with the same API shape as its
+neighbours — never as a one-off inside a screen.
+
+### Screen compositions
+
+{compositions}
+
+### Motion
+
+{transitions}
+
+Loading strategy: {loading}. Honour "Reduce Motion".
+
+### Copy
+
+Every visible string comes from `design/copy.json`. Do not invent copy, and do
+not hardcode a string the deck already defines.
 
 ### Modules
 

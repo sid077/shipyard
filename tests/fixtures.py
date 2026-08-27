@@ -10,10 +10,13 @@ from shipyard.contracts import (
     Architecture,
     AcceptanceCriterion,
     Backlog,
+    ColorRoles,
     Competitor,
-    DesignSpec,
-    DesignTokens,
+    ComponentSpec,
+    CopyDeck,
+    CopyEntry,
     Entity,
+    Flow,
     Idea,
     Module,
     MonetizationPlan,
@@ -22,9 +25,16 @@ from shipyard.contracts import (
     PricePoint,
     Requirement,
     Risk,
-    Screen,
+    ScreenComposition,
+    ScreenState,
+    Section,
     SuccessMetric,
     Ticket,
+    Transition,
+    TypeStep,
+    UISpec,
+    UXScreen,
+    UXSpec,
 )
 
 PASS_VERDICT = json.dumps({"verdict": "pass", "summary": "looks buildable", "findings": []})
@@ -104,27 +114,144 @@ def prd() -> PRD:
     )
 
 
-def design() -> DesignSpec:
-    return DesignSpec(
+PALETTE = ColorRoles(
+    primary="#1f6feb",
+    on_primary="#ffffff",
+    primary_pressed="#1a5fd0",
+    background="#ffffff",
+    surface="#f5f6f8",
+    surface_raised="#ffffff",
+    text="#111318",
+    text_muted="#5b6472",
+    border="#d8dbe0",
+    danger="#c9231f",
+    on_danger="#ffffff",
+    success="#1a7f37",
+)
+
+TYPE_SCALE = [
+    TypeStep(name="caption", size=13, line_height=18, weight="400"),
+    TypeStep(name="body", size=16, line_height=24, weight="400"),
+    TypeStep(name="body_strong", size=16, line_height=24, weight="600"),
+    TypeStep(name="heading", size=20, line_height=26, weight="600"),
+    TypeStep(name="title", size=28, line_height=34, weight="700"),
+]
+
+
+def ux() -> UXSpec:
+    return UXSpec(
+        navigation="tabs_with_stack",
+        screens=[
+            UXScreen(
+                id="split",
+                route="/(tabs)/index",
+                title_copy_key="split.title",
+                purpose="Enter a bill and split it.",
+                states=[
+                    ScreenState(name="default", trigger="on open", renders="amount field and party stepper"),
+                    ScreenState(name="error", trigger="invalid amount", renders="inline error", copy_key="split.error"),
+                ],
+                navigates_to=["history"],
+                gestures=["swipe down to dismiss the keyboard"],
+            ),
+            UXScreen(
+                id="history",
+                route="/(tabs)/history",
+                title_copy_key="history.title",
+                purpose="Review past splits.",
+                states=[
+                    ScreenState(name="default", trigger="has splits", renders="list of splits"),
+                    ScreenState(name="empty", trigger="no splits yet", renders="empty state", copy_key="history.empty"),
+                    ScreenState(name="loading", trigger="reading storage", renders="skeleton rows"),
+                ],
+                requires_entitlement="pro",
+                navigates_to=["paywall"],
+            ),
+            UXScreen(
+                id="paywall",
+                route="/paywall",
+                title_copy_key="paywall.title",
+                purpose="Sell the lifetime unlock.",
+                states=[
+                    ScreenState(name="default", trigger="quota spent", renders="price and buy button"),
+                    ScreenState(name="error", trigger="purchase failed", renders="inline error", copy_key="paywall.error"),
+                ],
+            ),
+        ],
+        flows=[Flow(name="first_split", steps=["split", "history"], success="a split is saved", failure="the amount is rejected")],
+        primary_flow="first_split",
+        transitions=[
+            Transition(name="push", describes="screen to screen", duration_ms=280, easing="standard"),
+            Transition(name="modal", describes="paywall entry", duration_ms=320, easing="emphasized"),
+        ],
+        loading_strategy="skeleton",
+        offline_behaviour="Everything works offline; splits persist on device.",
+        error_recovery="Errors are inline and retryable; nothing is lost on failure.",
+        haptic_moments=["split saved", "purchase completed"],
+    )
+
+
+def ui() -> UISpec:
+    return UISpec(
         app_name="Tip Splitter",
         tagline="Three taps. Correct every time.",
-        tokens=DesignTokens(color_primary="#1f6feb", color_bg="#ffffff", color_surface="#f5f6f8",
-                            color_text="#111318", color_muted="#5b6472", color_danger="#d1242f",
-                            radius=12, spacing_unit=4, font_heading="Inter", font_body="Inter",
-                            mode="system"),
-        screens=[
-            Screen(id="split", route="/(tabs)/index", title="Split", purpose="Enter a bill and split it.",
-                   elements=["amount field", "party stepper"], states=["empty", "error"],
-                   navigates_to=["history"]),
-            Screen(id="history", route="/(tabs)/history", title="History", purpose="Past splits.",
-                   elements=["list"], states=["empty", "loading", "paywalled"],
-                   requires_entitlement="pro", navigates_to=["paywall"]),
-            Screen(id="paywall", route="/paywall", title="Go Pro", purpose="Sell the lifetime unlock.",
-                   elements=["price", "buy button"], states=["loading", "error"]),
-        ],
-        primary_flow=["split", "history"],
         icon_concept="A receipt torn cleanly into three equal strips.",
         tone_of_voice="Plain and quick.",
+        colors=PALETTE,
+        type_scale=list(TYPE_SCALE),
+        spacing_unit=4,
+        radii={"sm": 8, "md": 12, "lg": 20, "full": 999},
+        elevation=[0, 1, 3],
+        min_touch_target=44,
+        components=[
+            ComponentSpec(name="Button", purpose="Primary actions", variants=["primary", "secondary", "ghost"],
+                          sizes=["md", "lg"], states=["default", "pressed", "disabled", "loading"],
+                          anatomy=["label", "optional icon"]),
+            ComponentSpec(name="Card", purpose="Group related content", variants=["flat", "raised"],
+                          states=["default"], anatomy=["container", "optional header"]),
+            ComponentSpec(name="ListRow", purpose="One split in history", variants=["default", "pressable"],
+                          states=["default", "pressed"], anatomy=["title", "subtitle", "trailing"]),
+            ComponentSpec(name="EmptyState", purpose="Nothing here yet", variants=["default"],
+                          states=["default"], anatomy=["icon", "title", "body", "action"]),
+            ComponentSpec(name="Skeleton", purpose="Loading placeholder", variants=["row", "block"],
+                          states=["default"], anatomy=["shimmering block"]),
+            ComponentSpec(name="Text", purpose="All typography", variants=list(s.name for s in TYPE_SCALE),
+                          states=["default"], anatomy=["glyphs"]),
+        ],
+        screens=[
+            ScreenComposition(screen_id="split", sections=[
+                Section(component="Text", copy_key="split.title", notes="screen title"),
+                Section(component="Card", notes="amount entry"),
+                Section(component="Button", copy_key="split.cta"),
+            ]),
+            ScreenComposition(screen_id="history", sections=[
+                Section(component="Text", copy_key="history.title"),
+                Section(component="ListRow", notes="one row per split"),
+                Section(component="EmptyState", copy_key="history.empty"),
+                Section(component="Skeleton", notes="while reading storage"),
+            ]),
+            ScreenComposition(screen_id="paywall", sections=[
+                Section(component="Text", copy_key="paywall.title"),
+                Section(component="Card", notes="price and benefits"),
+                Section(component="Button", copy_key="paywall.cta"),
+            ]),
+        ],
+        mode="system",
+    )
+
+
+def copy_deck() -> CopyDeck:
+    return CopyDeck(
+        entries={
+            "split.title": CopyEntry(text="Split", context="Screen title", max_chars=20),
+            "split.cta": CopyEntry(text="Split the bill", context="Primary action", max_chars=24),
+            "split.error": CopyEntry(text="Enter an amount above zero.", context="Invalid amount", max_chars=60),
+            "history.title": CopyEntry(text="History", context="Screen title", max_chars=20),
+            "history.empty": CopyEntry(text="No splits yet. Your first one lands here.", context="Empty history", max_chars=60),
+            "paywall.title": CopyEntry(text="Go Pro", context="Paywall title", max_chars=20),
+            "paywall.cta": CopyEntry(text="Unlock Pro", context="Purchase button", max_chars=24),
+            "paywall.error": CopyEntry(text="That purchase did not complete.", context="Purchase failure", max_chars=60),
+        }
     )
 
 
@@ -163,7 +290,9 @@ def full_project(project_dir):
     opportunity().save(project_dir)
     monetization().save(project_dir)
     prd().save(project_dir)
-    design().save(project_dir)
+    ux().save(project_dir)
+    ui().save(project_dir)
+    copy_deck().save(project_dir)
     architecture().save(project_dir)
     backlog().save(project_dir)
     (project_dir / "research").mkdir(parents=True, exist_ok=True)
@@ -171,3 +300,34 @@ def full_project(project_dir):
     (project_dir / "product").mkdir(parents=True, exist_ok=True)
     (project_dir / "product" / "prd.md").write_text("# PRD\n")
     return project_dir
+
+
+def preview_html() -> str:
+    """A stand-in for what `ui_designer` writes: self-contained and substantial
+    enough to pass the stage checks."""
+    spec = ui()
+    deck = copy_deck()
+    frames = "\n".join(
+        f"""    <section class="frame">
+      <h2>{screen.screen_id}</h2>
+      {"".join(f'<div class="row">{deck.entries[s.copy_key].text if s.copy_key else s.component}</div>' for s in screen.sections)}
+    </section>"""
+        for screen in spec.screens
+    )
+    padding = "<!-- " + ("a self-contained preview page. " * 90) + " -->"
+    return f"""<!doctype html>
+<meta charset="utf-8">
+<title>{spec.app_name} preview</title>
+<style>
+  body {{ background: {spec.colors.background}; color: {spec.colors.text};
+         font-family: -apple-system, system-ui, sans-serif; display: flex; gap: 24px; padding: 32px; }}
+  .frame {{ width: 390px; min-height: 844px; background: {spec.colors.surface};
+            border: 1px solid {spec.colors.border}; border-radius: 32px; padding: 24px; }}
+  .row {{ padding: 12px 0; border-bottom: 1px solid {spec.colors.border}; }}
+  h2 {{ color: {spec.colors.primary}; font-size: 20px; }}
+</style>
+<body>
+{frames}
+</body>
+{padding}
+"""

@@ -144,10 +144,10 @@ def test_scaffold_creates_the_app_from_the_template_and_applies_the_product(proj
 
     # The product config really was projected into the app.
     product = json.loads((app / "product.json").read_text())
-    assert product["name"] == fx.design().app_name
+    assert product["name"] == fx.ui().app_name
     assert product["bundleId"] == "com.shipyard.tipsplitter"
     tokens = (app / "src" / "theme" / "tokens.generated.ts").read_text()
-    assert fx.design().tokens.color_primary in tokens
+    assert fx.ui().colors.primary in tokens
 
     assert len(per_ticket) == 3
     for contents in per_ticket.values():

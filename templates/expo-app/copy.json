@@ -1,0 +1,18 @@
+{
+  "entries": {
+    "home.title": { "text": "Home", "context": "Screen title", "max_chars": 20 },
+    "home.empty": {
+      "text": "Nothing here yet. Add your first item to get started.",
+      "context": "Empty home list",
+      "max_chars": 60
+    },
+    "home.cta": { "text": "Add item", "context": "Primary action", "max_chars": 24 },
+    "paywall.title": { "text": "Go Pro", "context": "Paywall title", "max_chars": 20 },
+    "paywall.cta": { "text": "Unlock Pro", "context": "Purchase button", "max_chars": 24 },
+    "paywall.error": {
+      "text": "That purchase did not complete. You have not been charged.",
+      "context": "Purchase failure",
+      "max_chars": 80
+    }
+  }
+}

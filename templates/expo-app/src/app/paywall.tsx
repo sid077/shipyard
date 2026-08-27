@@ -1,13 +1,13 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { track } from '@/analytics';
-import { Button } from '@/components/button';
 import { headlinePrice, monetization } from '@/config/monetization';
 import { reportError } from '@/observability';
 import { useEntitlements } from '@/purchases/entitlements';
-import { radius, spacing, useTheme } from '@/theme';
+import { spacing, useTheme } from '@/theme';
+import { Button, Card, Stack, Text, haptics } from '@/ui';
 
 export default function PaywallScreen() {
   const theme = useTheme();
@@ -41,6 +41,7 @@ export default function PaywallScreen() {
       await action();
     } catch (caught) {
       reportError(caught, { where: 'PaywallScreen' });
+      void haptics.error();
       setError(failure);
     } finally {
       setBusy(false);
@@ -57,48 +58,53 @@ export default function PaywallScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]} testID="paywall">
-      <View style={styles.body}>
-        <Text style={[styles.headline, { color: theme.text }]}>{price.display_name}</Text>
-        <Text testID="paywall-price" style={[styles.price, { color: theme.primary }]}>
+      <Stack gap={3} style={styles.body}>
+        <Text variant="title">{price.display_name}</Text>
+        <Text testID="paywall-price" variant="heading" tone="primary">
           ${price.price_usd.toFixed(2)} {periodLabel}
         </Text>
         {monetization.trial_days > 0 ? (
-          <Text style={[styles.trial, { color: theme.muted }]}>
+          <Text tone="muted">
             Free for {monetization.trial_days} days, then ${price.price_usd.toFixed(2)}.
           </Text>
         ) : null}
 
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          {features.map((feature) => (
-            <Text key={feature} style={[styles.feature, { color: theme.text }]}>
-              {feature.replace(/_/g, ' ')}
-            </Text>
-          ))}
-        </View>
+        <Card>
+          <Stack gap={2}>
+            {features.map((feature) => (
+              <Text key={feature}>{feature.replace(/_/g, ' ')}</Text>
+            ))}
+          </Stack>
+        </Card>
 
         {!purchasesAvailable ? (
-          <Text testID="paywall-unavailable" style={[styles.error, { color: theme.muted }]}>
+          <Text testID="paywall-unavailable" variant="caption" tone="muted">
             Purchases are not available on this build.
           </Text>
         ) : null}
         {error ? (
-          <Text testID="paywall-error" style={[styles.error, { color: theme.danger }]}>
+          <Text testID="paywall-error" variant="caption" tone="danger">
             {error}
           </Text>
         ) : null}
-      </View>
+      </Stack>
 
-      <View style={styles.actions}>
-        {busy ? <ActivityIndicator color={theme.primary} /> : null}
+      <Stack gap={3} style={styles.actions}>
         <Button
           testID="paywall-buy"
           label={`Unlock ${price.display_name}`}
-          disabled={busy || !purchasesAvailable}
+          size="lg"
+          loading={busy}
+          disabled={!purchasesAvailable}
           onPress={() =>
             run(async () => {
               const ok = await purchase(price.sku);
-              if (ok) router.back();
-              else setError('That purchase did not complete.');
+              if (ok) {
+                await haptics.success();
+                router.back();
+              } else {
+                setError('That purchase did not complete.');
+              }
             }, 'That purchase did not complete.')
           }
         />
@@ -109,25 +115,14 @@ export default function PaywallScreen() {
           disabled={busy || !purchasesAvailable}
           onPress={() => run(restore, 'We could not restore your purchases.')}
         />
-        <Button testID="paywall-dismiss" label="Not now" variant="secondary" onPress={dismiss} />
-      </View>
+        <Button testID="paywall-dismiss" label="Not now" variant="ghost" onPress={dismiss} />
+      </Stack>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, padding: spacing(5), justifyContent: 'space-between' },
-  body: { gap: spacing(3), paddingTop: spacing(6) },
-  headline: { fontSize: 28, fontWeight: '700' },
-  price: { fontSize: 20, fontWeight: '600' },
-  trial: { fontSize: 15 },
-  card: {
-    borderRadius: radius,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: spacing(4),
-    gap: spacing(2),
-  },
-  feature: { fontSize: 16, textTransform: 'capitalize' },
-  error: { fontSize: 14 },
-  actions: { gap: spacing(3), paddingBottom: spacing(4) },
+  body: { paddingTop: spacing(6) },
+  actions: { paddingBottom: spacing(4) },
 });

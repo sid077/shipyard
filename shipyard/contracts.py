@@ -10,6 +10,7 @@ three stages later.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, ClassVar, Literal, Self
 
@@ -205,52 +206,268 @@ class PRD(Artifact):
 # --------------------------------------------------------------------------
 
 
-class DesignTokens(BaseModel):
+class TypeStep(BaseModel):
+    """One rung of the type ramp."""
+
     model_config = ConfigDict(extra="forbid")
 
-    color_primary: str = Field(pattern=HEX)
-    color_bg: str = Field(pattern=HEX)
-    color_surface: str = Field(pattern=HEX)
-    color_text: str = Field(pattern=HEX)
-    color_muted: str = Field(pattern=HEX)
-    color_danger: str = Field(pattern=HEX)
-    radius: int = Field(ge=0, le=48)
-    spacing_unit: int = Field(ge=2, le=16)
-    font_heading: str
-    font_body: str
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    size: int = Field(ge=10, le=72)
+    line_height: int = Field(ge=12, le=96)
+    weight: Literal["400", "500", "600", "700", "800"] = "400"
+    letter_spacing: float = Field(default=0.0, ge=-2.0, le=4.0)
+
+    @model_validator(mode="after")
+    def _line_height_is_readable(self) -> Self:
+        if self.line_height < round(self.size * 1.15):
+            raise ValueError(
+                f"type step {self.name!r} has line_height {self.line_height} for size "
+                f"{self.size}; text needs at least {round(self.size * 1.15)} to be legible"
+            )
+        return self
+
+
+class ColorRoles(BaseModel):
+    """Semantic colour roles. Named by job, never by hue.
+
+    Contrast is checked here rather than trusted: a palette that fails is a
+    stage failure before any code is written.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    primary: str = Field(pattern=HEX)
+    on_primary: str = Field(pattern=HEX)
+    primary_pressed: str = Field(pattern=HEX)
+    background: str = Field(pattern=HEX)
+    surface: str = Field(pattern=HEX)
+    surface_raised: str = Field(pattern=HEX)
+    text: str = Field(pattern=HEX)
+    text_muted: str = Field(pattern=HEX)
+    border: str = Field(pattern=HEX)
+    danger: str = Field(pattern=HEX)
+    on_danger: str = Field(pattern=HEX)
+    success: str = Field(pattern=HEX)
+
+    @model_validator(mode="after")
+    def _contrast_is_legible(self) -> Self:
+        from .color import NON_TEXT_CONTRAST, TEXT_CONTRAST, check_contrast, contrast_ratio
+
+        problems = check_contrast(
+            [
+                ("body text on background", self.text, self.background, TEXT_CONTRAST),
+                ("body text on surface", self.text, self.surface, TEXT_CONTRAST),
+                ("body text on raised surface", self.text, self.surface_raised, TEXT_CONTRAST),
+                # Muted text is still text; it does not get a discount.
+                ("muted text on background", self.text_muted, self.background, TEXT_CONTRAST),
+                ("muted text on surface", self.text_muted, self.surface, TEXT_CONTRAST),
+                ("button label on primary", self.on_primary, self.primary, TEXT_CONTRAST),
+                ("button label on pressed primary", self.on_primary, self.primary_pressed, TEXT_CONTRAST),
+                ("label on danger", self.on_danger, self.danger, TEXT_CONTRAST),
+                # Non-text UI: these carry meaning on their own.
+                ("primary against background", self.primary, self.background, NON_TEXT_CONTRAST),
+                ("danger against background", self.danger, self.background, NON_TEXT_CONTRAST),
+                ("success against background", self.success, self.background, NON_TEXT_CONTRAST),
+            ]
+        )
+        # A border nobody can see is not a border.
+        if contrast_ratio(self.border, self.surface) < 1.15:
+            problems.append(
+                f"border {self.border} is invisible against surface {self.surface}"
+            )
+        if problems:
+            raise ValueError("; ".join(problems))
+        return self
+
+
+class ComponentSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(pattern=r"^[A-Z][A-Za-z0-9]*$")
+    purpose: str
+    variants: list[str] = Field(min_length=1)
+    sizes: list[str] = []
+    states: list[str] = Field(min_length=1)
+    anatomy: list[str] = []
+
+    @model_validator(mode="after")
+    def _has_a_default_state(self) -> Self:
+        if "default" not in self.states:
+            raise ValueError(f"component {self.name!r} must declare a 'default' state")
+        return self
+
+
+class Section(BaseModel):
+    """One block of a screen, naming the component that renders it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    component: str
+    copy_key: str | None = None
+    notes: str = ""
+
+
+class ScreenComposition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    screen_id: str = Field(pattern=SLUG)
+    sections: list[Section] = Field(min_length=1)
+
+
+class UISpec(Artifact):
+    """The visual system. Owned by `ui_designer`."""
+
+    rel_path: ClassVar[str] = "design/ui.json"
+
+    app_name: str
+    tagline: str
+    icon_concept: str
+    tone_of_voice: str
+    colors: ColorRoles
+    type_scale: list[TypeStep] = Field(min_length=5)
+    spacing_unit: int = Field(ge=2, le=12)
+    radii: dict[str, int] = Field(min_length=1)
+    elevation: list[int] = Field(min_length=2)
+    min_touch_target: int = Field(default=44, ge=44, le=72)
+    components: list[ComponentSpec] = Field(min_length=6)
+    screens: list[ScreenComposition] = Field(min_length=3)
     mode: Literal["light", "dark", "system"] = "system"
 
+    @model_validator(mode="after")
+    def _scale_and_inventory_hold_together(self) -> Self:
+        sizes = [step.size for step in self.type_scale]
+        if sizes != sorted(sizes):
+            raise ValueError(
+                f"type_scale must be ordered smallest to largest, got {sizes}"
+            )
+        # One size at two weights is a real rung (body / body_strong); the same
+        # size at the same weight twice is a duplicate.
+        rungs = [(step.size, step.weight) for step in self.type_scale]
+        duplicates = sorted({r for r in rungs if rungs.count(r) > 1})
+        if duplicates:
+            raise ValueError(
+                f"type_scale repeats the same size and weight: {duplicates}"
+            )
+        names = [step.name for step in self.type_scale]
+        if len(set(names)) != len(names):
+            raise ValueError(f"type_scale reuses a step name: {names}")
+        if "body" not in names:
+            raise ValueError(f"type_scale must include a 'body' step; got {names}")
+        body = next(step for step in self.type_scale if step.name == "body")
+        if body.size < 15:
+            raise ValueError(
+                f"body text is {body.size}pt; mobile body text must be at least 15pt"
+            )
 
-class Screen(BaseModel):
+        known = {c.name for c in self.components}
+        composed = {s.screen_id for s in self.screens}
+        if len(composed) != len(self.screens):
+            raise ValueError("two compositions target the same screen_id")
+        for screen in self.screens:
+            for section in screen.sections:
+                if section.component not in known:
+                    raise ValueError(
+                        f"screen {screen.screen_id!r} uses component "
+                        f"{section.component!r}, which is not in the inventory "
+                        f"({sorted(known)})"
+                    )
+        return self
+
+    def copy_keys(self) -> set[str]:
+        return {
+            s.copy_key
+            for screen in self.screens
+            for s in screen.sections
+            if s.copy_key
+        }
+
+
+# --------------------------------------------------------------------------
+
+
+class ScreenState(BaseModel):
+    """A state a screen can actually be in. Unnamed states become bugs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    trigger: str
+    renders: str
+    copy_key: str | None = None
+
+
+class UXScreen(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(pattern=SLUG)
     route: str
-    title: str
+    title_copy_key: str
     purpose: str
-    elements: list[str] = Field(min_length=1)
-    states: list[str] = Field(min_length=1)
+    states: list[ScreenState] = Field(min_length=1)
     requires_entitlement: str | None = None
     navigates_to: list[str] = []
-
-
-class DesignSpec(Artifact):
-    rel_path: ClassVar[str] = "design/design.json"
-
-    app_name: str
-    tagline: str
-    tokens: DesignTokens
-    screens: list[Screen] = Field(min_length=3)
-    primary_flow: list[str] = Field(min_length=2)
-    icon_concept: str
-    tone_of_voice: str
+    gestures: list[str] = []
 
     @model_validator(mode="after")
-    def _flow_and_links_resolve(self) -> Self:
+    def _has_a_default_state(self) -> Self:
+        names = [s.name for s in self.states]
+        if "default" not in names:
+            raise ValueError(f"screen {self.id!r} must declare a 'default' state; got {names}")
+        if len(set(names)) != len(names):
+            raise ValueError(f"screen {self.id!r} declares a state twice: {names}")
+        return self
+
+
+class Flow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    steps: list[str] = Field(min_length=2)
+    success: str
+    failure: str
+
+
+class Transition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    describes: str
+    # Below ~80ms reads as a jump; above ~600ms reads as sluggish.
+    duration_ms: int = Field(ge=80, le=600)
+    easing: Literal["standard", "decelerate", "accelerate", "emphasized", "spring"]
+
+
+class UXSpec(Artifact):
+    """Structure, states and motion. Owned by `ux_architect`."""
+
+    rel_path: ClassVar[str] = "design/ux.json"
+
+    navigation: Literal["stack", "tabs", "tabs_with_stack", "drawer"]
+    screens: list[UXScreen] = Field(min_length=3)
+    flows: list[Flow] = Field(min_length=1)
+    primary_flow: str
+    transitions: list[Transition] = Field(min_length=2)
+    loading_strategy: Literal["skeleton", "spinner", "optimistic"]
+    offline_behaviour: str
+    error_recovery: str
+    haptic_moments: list[str] = []
+
+    @model_validator(mode="after")
+    def _references_resolve(self) -> Self:
         ids = {s.id for s in self.screens}
-        for sid in self.primary_flow:
-            if sid not in ids:
-                raise ValueError(f"primary_flow references unknown screen id {sid!r}")
+        if len(ids) != len(self.screens):
+            raise ValueError("two screens share an id")
+        flow_names = {f.name for f in self.flows}
+        if self.primary_flow not in flow_names:
+            raise ValueError(
+                f"primary_flow {self.primary_flow!r} is not one of {sorted(flow_names)}"
+            )
+        for flow in self.flows:
+            for step in flow.steps:
+                if step not in ids:
+                    raise ValueError(
+                        f"flow {flow.name!r} steps through unknown screen {step!r}"
+                    )
         for screen in self.screens:
             for target in screen.navigates_to:
                 if target not in ids:
@@ -259,7 +476,102 @@ class DesignSpec(Artifact):
                     )
         return self
 
+    def copy_keys(self) -> set[str]:
+        keys = {s.title_copy_key for s in self.screens}
+        keys |= {
+            state.copy_key
+            for screen in self.screens
+            for state in screen.states
+            if state.copy_key
+        }
+        return keys
 
+
+# --------------------------------------------------------------------------
+
+
+class CopyEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1)
+    context: str
+    max_chars: int = Field(default=80, ge=1, le=600)
+
+    @model_validator(mode="after")
+    def _fits(self) -> Self:
+        if len(self.text) > self.max_chars:
+            raise ValueError(
+                f"copy is {len(self.text)} characters but max_chars is "
+                f"{self.max_chars}: {self.text!r}"
+            )
+        return self
+
+
+class CopyDeck(Artifact):
+    """Every string the app renders. Owned by `ux_writer`."""
+
+    rel_path: ClassVar[str] = "design/copy.json"
+
+    entries: dict[str, CopyEntry] = Field(min_length=5)
+
+    @model_validator(mode="after")
+    def _keys_are_usable(self) -> Self:
+        bad = [k for k in self.entries if not re.fullmatch(r"[a-z][a-z0-9_.]*", k)]
+        if bad:
+            raise ValueError(f"copy keys must be lower_snake or dotted: {sorted(bad)}")
+        placeholders = [
+            k
+            for k, e in self.entries.items()
+            if re.search(r"(lorem ipsum|\bTODO\b|\[.*?\]|xxx+)", e.text, re.IGNORECASE)
+        ]
+        if placeholders:
+            raise ValueError(
+                f"these entries are placeholders, not copy: {sorted(placeholders)}"
+            )
+        return self
+
+
+def validate_design_bundle(project_dir: Path) -> list[str]:
+    """Cross-artifact checks the three design specs cannot make alone.
+
+    Each artifact validates itself on write; this is what catches the seams
+    between them - a screen composed but never specified, a copy key referenced
+    but never written.
+    """
+    problems: list[str] = []
+    try:
+        ux = UXSpec.load(project_dir)
+        ui = UISpec.load(project_dir)
+        copy = CopyDeck.load(project_dir)
+    except Exception as exc:
+        return [f"could not load the design bundle: {exc}"]
+
+    ux_ids = {s.id for s in ux.screens}
+    ui_ids = {s.screen_id for s in ui.screens}
+    for missing in sorted(ui_ids - ux_ids):
+        problems.append(
+            f"design/ui.json composes screen {missing!r}, which design/ux.json "
+            f"does not specify"
+        )
+    for missing in sorted(ux_ids - ui_ids):
+        problems.append(
+            f"design/ux.json specifies screen {missing!r}, which design/ui.json "
+            f"never composes"
+        )
+
+    referenced = ux.copy_keys() | ui.copy_keys()
+    for missing in sorted(referenced - set(copy.entries)):
+        problems.append(f"copy key {missing!r} is referenced but not in design/copy.json")
+
+    unused = sorted(set(copy.entries) - referenced)
+    if len(unused) > max(3, len(copy.entries) // 2):
+        problems.append(
+            f"design/copy.json has {len(unused)} entries nothing references: {unused[:8]}"
+        )
+    return problems
+
+
+# --------------------------------------------------------------------------
 # --------------------------------------------------------------------------
 # Stage 40 - architecture
 # --------------------------------------------------------------------------
@@ -511,7 +823,9 @@ ARTIFACTS: dict[str, type[Artifact]] = {
         Opportunity,
         MonetizationPlan,
         PRD,
-        DesignSpec,
+        UXSpec,
+        UISpec,
+        CopyDeck,
         Architecture,
         Backlog,
         BuildReport,

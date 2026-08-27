@@ -100,6 +100,14 @@ class Stage(ABC):
                 )
         return problems
 
+    def cross_validate(self, ctx: StageContext) -> list[str]:
+        """Checks that span several of this stage's artifacts.
+
+        Each artifact validates itself on write; this is for the seams between
+        them, which no single model can see.
+        """
+        return []
+
     def check_requires(self, ctx: StageContext) -> list[str]:
         return [
             f"missing input artifact {cls.rel_path} (an earlier stage must produce it)"
@@ -149,6 +157,8 @@ async def run_stage(stage: Stage, ctx: StageContext) -> tuple[bool, str]:
             continue
 
         problems = stage.validate_outputs(ctx)
+        if not problems:
+            problems = stage.cross_validate(ctx)
         if problems:
             last_problem = "\n".join(problems)
             ledger.event("stage.contract_failed", stage=stage.key, attempt=attempt)

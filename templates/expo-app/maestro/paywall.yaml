@@ -1,6 +1,6 @@
 # A free user hits the paywall at exactly the allowance in monetization.json
-# (5 use(s) of "unlimited_items"), and the paywall shows a real price.
-appId: com.shipyard.starter
+# (5 use(s) of "unlimited_history"), and the paywall shows a real price.
+appId: com.shipyard.tipsplitter
 ---
 - launchApp:
     clearState: true

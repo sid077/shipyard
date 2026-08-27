@@ -1,23 +1,28 @@
 import { useColorScheme } from 'react-native';
 
-import { tokens } from './tokens.generated';
+import { tokens, type TypeVariant } from './tokens.generated';
 
 /**
- * A palette derived from the generated design tokens. The light palette is the
- * tokens as written; the dark palette is derived so a designer only has to
- * specify one set and both render legibly.
+ * One palette, derived. The design roles specify the light palette; the dark
+ * one is computed from it so a product cannot ship a dark mode nobody checked.
  */
 
 export type Palette = {
   primary: string;
+  onPrimary: string;
+  primaryPressed: string;
   background: string;
   surface: string;
+  surfaceRaised: string;
   text: string;
-  muted: string;
-  danger: string;
+  textMuted: string;
   border: string;
-  onPrimary: string;
+  danger: string;
+  onDanger: string;
+  success: string;
 };
+
+export type ThemeMode = 'light' | 'dark' | 'system';
 
 /** Relative luminance per WCAG 2.1, used to pick legible foregrounds. */
 export function luminance(hex: string): number {
@@ -52,32 +57,43 @@ function mix(hex: string, target: string, amount: number): string {
   return `#${channel(r1, r2)}${channel(g1, g2)}${channel(b1, b2)}`;
 }
 
-export const lightPalette: Palette = {
-  primary: tokens.colorPrimary,
-  background: tokens.colorBg,
-  surface: tokens.colorSurface,
-  text: tokens.colorText,
-  muted: tokens.colorMuted,
-  danger: tokens.colorDanger,
-  border: mix(tokens.colorSurface, tokens.colorText, 0.12),
-  onPrimary: readableOn(tokens.colorPrimary),
-};
+const c = tokens.colors;
+
+export const lightPalette: Palette = { ...c };
 
 export const darkPalette: Palette = {
-  primary: mix(tokens.colorPrimary, '#ffffff', 0.12),
-  background: mix(tokens.colorText, '#000000', 0.4),
-  surface: mix(tokens.colorText, '#ffffff', 0.08),
-  text: mix(tokens.colorBg, '#000000', 0.06),
-  muted: mix(tokens.colorMuted, '#ffffff', 0.35),
-  danger: mix(tokens.colorDanger, '#ffffff', 0.2),
-  border: mix(tokens.colorText, '#ffffff', 0.22),
-  onPrimary: readableOn(mix(tokens.colorPrimary, '#ffffff', 0.12)),
+  primary: mix(c.primary, '#ffffff', 0.18),
+  onPrimary: readableOn(mix(c.primary, '#ffffff', 0.18)),
+  primaryPressed: mix(c.primary, '#ffffff', 0.3),
+  background: mix(c.text, '#000000', 0.45),
+  surface: mix(c.text, '#ffffff', 0.1),
+  surfaceRaised: mix(c.text, '#ffffff', 0.16),
+  text: mix(c.background, '#000000', 0.06),
+  textMuted: mix(c.textMuted, '#ffffff', 0.45),
+  border: mix(c.text, '#ffffff', 0.26),
+  danger: mix(c.danger, '#ffffff', 0.28),
+  onDanger: readableOn(mix(c.danger, '#ffffff', 0.28)),
+  success: mix(c.success, '#ffffff', 0.28),
 };
 
+/** Multiples of the design's spacing unit. Never a raw pixel value. */
 export const spacing = (steps: number) => steps * tokens.spacingUnit;
-export const radius = tokens.radius;
+export const radii = tokens.radii;
+export const motion = tokens.motion;
+export const typeScale = tokens.type;
+export const MIN_TOUCH_TARGET = tokens.minTouchTarget;
 
-export type ThemeMode = 'light' | 'dark' | 'system';
+export function elevation(level: number) {
+  const height = tokens.elevation[Math.min(level, tokens.elevation.length - 1)] ?? 0;
+  if (height === 0) return {};
+  return {
+    shadowColor: '#000',
+    shadowOpacity: 0.08 + height * 0.02,
+    shadowRadius: height * 3,
+    shadowOffset: { width: 0, height },
+    elevation: height,
+  };
+}
 
 export function useTheme(): Palette {
   const scheme = useColorScheme();
@@ -90,3 +106,4 @@ export function useTheme(): Palette {
 }
 
 export { tokens };
+export type { TypeVariant };

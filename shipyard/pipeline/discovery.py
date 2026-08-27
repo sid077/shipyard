@@ -12,11 +12,14 @@ from ..contracts import (
     Architecture,
     Artifact,
     Backlog,
-    DesignSpec,
+    CopyDeck,
     Idea,
     MonetizationPlan,
     Opportunity,
     PRD,
+    UISpec,
+    UXSpec,
+    validate_design_bundle,
 )
 from ..gates import Gate
 from ..runner import RoleRequest
@@ -283,119 +286,263 @@ class Definition(Stage):
 # --------------------------------------------------------------------------
 
 
+REFERENCES = ("layout-and-touch", "type-and-colour", "motion-and-haptics", "ux-writing", "accessibility")
+
+
+def _reference_notes(ctx: StageContext, *names: str) -> list[Path]:
+    base = ctx.settings.repo_root / "references" / "design"
+    return existing(*(base / f"{n}.md" for n in names))
+
+
 class Design(Stage):
+    """Structure, then words, then looks.
+
+    Three roles in that order for a reason: the UX Architect names the copy keys
+    each screen and state needs, the UX Writer fills them, and only then can the
+    UI Designer compose screens and render a preview with real copy in it.
+    """
+
     key = "s30_design"
     title = "Design"
-    owner_role = "designer"
+    owner_role = "ui_designer"
     requires = (PRD, MonetizationPlan)
-    outputs = (DesignSpec,)
+    outputs = (UXSpec, CopyDeck, UISpec)
     gate_after = Gate.G1
     dod = """
-- Every p0 requirement in the PRD is reachable from some screen in the spec.
+- Every p0 requirement in the PRD is reachable from some screen.
+- Every screen names the states it can really be in, including empty, loading
+  and error where they apply, and each state says what triggers it.
 - Screens behind the paywall carry `requires_entitlement` matching an
   entitlement id in `monetization.json`.
-- Every screen names its empty, loading and error states where they apply.
-- `primary_flow` is a real path from launch to the product's core value.
-- Colour tokens are legible: body text contrasts against both background and
-  surface, and white text is readable on the primary colour.
-- Copy is written, not placeheld.
+- The primary flow reaches the product's core value in as few steps as the
+  product allows.
+- Copy is written, not placeheld: real button labels, real empty states, real
+  error messages that say what to do next.
+- The component inventory covers every section the screens compose, so an
+  engineer builds from it rather than inventing.
+- `design/preview.html` renders every screen with the real tokens and the real
+  copy, and looks like the product rather than like a diagram.
 """.strip()
 
     async def execute(self, ctx: StageContext) -> None:
         prd = PRD.load(ctx.project_dir)
         monetization = MonetizationPlan.load(ctx.project_dir)
+        entitlements = ", ".join(f"`{k}`" for k in monetization.entitlements)
+        spec_inputs = existing(
+            PRD.full_path(ctx.project_dir),
+            ctx.project_dir / "product" / "prd.md",
+            MonetizationPlan.full_path(ctx.project_dir),
+        )
+
+        # 1. Structure, states and motion.
         await ctx.runner.invoke(
             RoleRequest(
-                role="designer",
+                role="ux_architect",
                 stage=self.key,
                 cwd=ctx.project_dir,
                 allowed_roots=[ctx.project_dir],
+                read_roots=[ctx.settings.repo_root / "references"],
                 task=compose(
                     objective=(
-                        f"Design the screens, flow and visual system for **{prd.title}**.\n\n"
+                        f"Define the structure, states and motion of **{prd.title}**.\n\n"
                         f"{prd.summary}\n\n"
-                        f"Entitlement ids available for gating: "
-                        f"{', '.join(f'`{k}`' for k in monetization.entitlements)}. "
-                        f"The paywall appears {monetization.paywall_trigger}, on: "
-                        f"{', '.join(monetization.paywall_placement)}."
+                        f"Entitlement ids available for gating: {entitlements}. "
+                        f"The paywall appears {monetization.paywall_trigger}."
                     ),
                     project_dir=ctx.project_dir,
-                    inputs=existing(
-                        PRD.full_path(ctx.project_dir),
-                        ctx.project_dir / "product" / "prd.md",
-                        MonetizationPlan.full_path(ctx.project_dir),
+                    inputs=spec_inputs + _reference_notes(ctx, "layout-and-touch", "motion-and-haptics", "accessibility"),
+                    outputs=[UXSpec],
+                    guidance=(
+                        "Name a copy key for every screen title, every non-default state "
+                        "that shows a message, and the primary action of each screen. The "
+                        "UX Writer fills those keys next and the UI Designer may only use "
+                        "keys that exist, so a key you forget is a screen that cannot "
+                        "speak. Use dotted lower_snake keys like `history.empty`."
                     ),
-                    outputs=[DesignSpec],
+                    feedback=ctx.feedback,
+                ),
+            )
+        )
+        ux = _require(ctx, UXSpec)
+
+        # 2. Every string, before anything renders it.
+        needed = sorted(ux.copy_keys())
+        await ctx.runner.invoke(
+            RoleRequest(
+                role="ux_writer",
+                stage=self.key,
+                cwd=ctx.project_dir,
+                allowed_roots=[ctx.project_dir],
+                read_roots=[ctx.settings.repo_root / "references"],
+                task=compose(
+                    objective=(
+                        f"Write every string **{prd.title}** renders.\n\n"
+                        f"Tone: {prd.summary}\n\n"
+                        f"These keys are referenced by the UX spec and must all exist:\n"
+                        + "\n".join(f"- `{k}`" for k in needed)
+                    ),
+                    project_dir=ctx.project_dir,
+                    inputs=spec_inputs
+                    + existing(UXSpec.full_path(ctx.project_dir))
+                    + _reference_notes(ctx, "ux-writing"),
+                    outputs=[CopyDeck],
+                    guidance=(
+                        "Add the keys above plus any button label, empty state or error "
+                        "message the screens in the UX spec plainly need. Set `max_chars` "
+                        "to the real ceiling for where the string appears - roughly 24 for "
+                        "a button, 20 for a screen title, 60 for an empty state, 80 for an "
+                        "error. Paywall copy names the benefit and states the price "
+                        f"plainly: {', '.join(f'${p.price_usd:.2f}/{p.period}' for p in monetization.price_points)}."
+                    ),
+                    feedback=ctx.feedback,
+                ),
+            )
+        )
+        copy = _require(ctx, CopyDeck)
+
+        # 3. The visual system, and a preview a human can judge.
+        preview = ctx.project_dir / "design" / "preview.html"
+        screen_list = "\n".join(
+            f"- `{s.id}` ({s.route}) - {s.purpose}; states: "
+            + ", ".join(st.name for st in s.states)
+            for s in ux.screens
+        )
+        await ctx.runner.invoke(
+            RoleRequest(
+                role="ui_designer",
+                stage=self.key,
+                cwd=ctx.project_dir,
+                allowed_roots=[ctx.project_dir],
+                read_roots=[ctx.settings.repo_root / "references"],
+                task=compose(
+                    objective=(
+                        f"Design the visual system for **{prd.title}** and compose its "
+                        f"screens.\n\n{prd.summary}\n\nScreens to compose:\n{screen_list}"
+                    ),
+                    project_dir=ctx.project_dir,
+                    inputs=spec_inputs
+                    + existing(
+                        UXSpec.full_path(ctx.project_dir),
+                        CopyDeck.full_path(ctx.project_dir),
+                    )
+                    + _reference_notes(ctx, "type-and-colour", "layout-and-touch", "accessibility"),
+                    outputs=[UISpec],
+                    guidance=(
+                        f"Compose exactly the screens the UX spec defines - no more, no "
+                        f"fewer. Section `copy_key` values must be keys that already exist "
+                        f"in `design/copy.json` ({len(copy.entries)} available); leave "
+                        f"`copy_key` null for a section that renders no fixed string.\n\n"
+                        f"Contrast is computed and will reject the palette if it fails, so "
+                        f"check the arithmetic before you commit to colours. Muted text "
+                        f"needs 4.5:1 too.\n\n"
+                        f"Then write `{preview}`: one self-contained HTML file, no external "
+                        f"requests, showing every screen side by side in a 390x844 phone "
+                        f"frame, rendered with your real tokens and the real copy from the "
+                        f"deck. This is what the operator looks at to approve the product, "
+                        f"so it should look like the app, not like a spec."
+                    ),
                     feedback=ctx.feedback,
                 ),
             )
         )
 
+    def cross_validate(self, ctx: StageContext) -> list[str]:
+        return validate_design_bundle(ctx.project_dir)
+
+    def checks(self, ctx: StageContext) -> list[Check]:
+        preview = ctx.project_dir / "design" / "preview.html"
+        return [
+            files_exist([preview], ctx.project_dir, "preview-exists"),
+            # A stub page is worse than none: the operator approves by looking.
+            Check(
+                "preview-is-substantial",
+                f"test $(wc -c < {preview}) -gt 3000",
+                ctx.project_dir,
+                60,
+            ),
+            Check(
+                "preview-is-self-contained",
+                f"! grep -qE '<(script|link|img)[^>]+(src|href)=\"https?://' {preview}",
+                ctx.project_dir,
+                60,
+            ),
+        ]
+
     def briefing(self, ctx: StageContext) -> str:
         prd = PRD.load(ctx.project_dir)
-        design = DesignSpec.load(ctx.project_dir)
+        ux = UXSpec.load(ctx.project_dir)
+        ui = UISpec.load(ctx.project_dir)
+        copy = CopyDeck.load(ctx.project_dir)
         monetization = MonetizationPlan.load(ctx.project_dir)
+
         reqs = "\n".join(
-            f"| {r.id} | {r.priority} | {r.title} | {len(r.acceptance)} criteria |"
-            for r in prd.requirements
+            f"| {r.id} | {r.priority} | {r.title} |" for r in prd.requirements
         )
         screens = "\n".join(
-            f"| `{s.id}` | `{s.route}` | {s.purpose}"
-            f"{' | 🔒 ' + s.requires_entitlement if s.requires_entitlement else ' |'} |"
-            for s in design.screens
+            f"| `{s.id}` | {copy.entries[s.title_copy_key].text if s.title_copy_key in copy.entries else s.id} "
+            f"| {', '.join(st.name for st in s.states)} "
+            f"| {s.requires_entitlement or '-'} |"
+            for s in ux.screens
         )
-        return f"""## {design.app_name} - {design.tagline}
+        flow = next(f for f in ux.flows if f.name == ux.primary_flow)
+        palette = ui.colors
+        sample = "\n".join(
+            f"- **{k}** - {v.text}"
+            for k, v in list(copy.entries.items())[:6]
+        )
+        return f"""## {ui.app_name} - {ui.tagline}
 
 {prd.summary}
 
-## Goals
+### Look at the design
 
-{chr(10).join('- ' + g for g in prd.goals)}
-
-## Explicitly not in v1
-
-{chr(10).join('- ' + g for g in prd.non_goals) or '- (nothing was cut - worth questioning)'}
+`design/preview.html` - every screen in a phone frame, real tokens, real copy.
+Open it in a browser before deciding.
 
 ## Requirements
 
-| ID | Priority | Title | Verification |
-|---|---|---|---|
+| ID | Priority | Title |
+|---|---|---|
 {reqs}
 
-## Screens
+## Screens ({ux.navigation})
 
-| Screen | Route | Purpose | Gated |
+| Screen | Title | States | Gated |
 |---|---|---|---|
 {screens}
 
-**Primary flow:** {' -> '.join(design.primary_flow)}
+**Primary flow — {flow.name}:** {' -> '.join(flow.steps)}
+Succeeds when {flow.success}; fails when {flow.failure}.
+
+- Loading: {ux.loading_strategy}
+- Offline: {ux.offline_behaviour}
+- Errors: {ux.error_recovery}
+
+## Look
+
+Primary `{palette.primary}` on `{palette.background}` · text `{palette.text}` ·
+{len(ui.type_scale)}-step type ramp with {next(t.size for t in ui.type_scale if t.name == 'body')}pt body ·
+{ui.spacing_unit}pt spacing unit · {len(ui.components)} components · {ui.mode} mode
+
+Icon: {ui.icon_concept}
+
+## Voice
+
+{sample}
 
 ## Money
 
 {monetization.model} - {', '.join(f'${p.price_usd:.2f}/{p.period}' for p in monetization.price_points)}
 {f'with a {monetization.trial_days}-day trial' if monetization.trial_days else 'with no trial'}.
 Paywall: {monetization.paywall_trigger}
-
-## Look
-
-Primary `{design.tokens.color_primary}` · background `{design.tokens.color_bg}` ·
-text `{design.tokens.color_text}` · radius {design.tokens.radius} ·
-{design.tokens.font_heading} / {design.tokens.font_body} · {design.tokens.mode} mode
-
-Icon concept: {design.icon_concept}
-
-Full spec: `product/prd.md`, `design/design.json`
 """
-
-
-# --------------------------------------------------------------------------
 
 
 class ArchitectureStage(Stage):
     key = "s40_architecture"
     title = "Architecture"
     owner_role = "architect"
-    requires = (PRD, DesignSpec)
+    requires = (PRD, UXSpec, UISpec)
     outputs = (Architecture,)
     dod = """
 - Every entry in `runtime_deps` is a real npm package that this product needs
@@ -410,7 +557,8 @@ class ArchitectureStage(Stage):
 
     async def execute(self, ctx: StageContext) -> None:
         prd = PRD.load(ctx.project_dir)
-        design = DesignSpec.load(ctx.project_dir)
+        ux = UXSpec.load(ctx.project_dir)
+        design = UISpec.load(ctx.project_dir)
         await ctx.runner.invoke(
             RoleRequest(
                 role="architect",
@@ -422,13 +570,14 @@ class ArchitectureStage(Stage):
                         f"Decide how **{design.app_name}** is built on top of the studio's "
                         f"`expo-app` template, and record the decisions.\n\n"
                         f"{prd.summary}\n\n"
-                        f"There are {len(design.screens)} screens and "
+                        f"There are {len(ux.screens)} screens and "
                         f"{len(prd.requirements)} requirements to support."
                     ),
                     project_dir=ctx.project_dir,
                     inputs=existing(
                         PRD.full_path(ctx.project_dir),
-                        DesignSpec.full_path(ctx.project_dir),
+                        UXSpec.full_path(ctx.project_dir),
+                        UISpec.full_path(ctx.project_dir),
                         MonetizationPlan.full_path(ctx.project_dir),
                     ),
                     outputs=[Architecture],
@@ -452,7 +601,7 @@ class Planning(Stage):
     key = "s50_planning"
     title = "Planning"
     owner_role = "planner"
-    requires = (PRD, DesignSpec, Architecture, MonetizationPlan)
+    requires = (PRD, UXSpec, UISpec, Architecture, MonetizationPlan)
     outputs = (Backlog,)
     dod = """
 - Every p0 requirement in the PRD is covered by at least one ticket.
@@ -466,7 +615,7 @@ class Planning(Stage):
 
     async def execute(self, ctx: StageContext) -> None:
         prd = PRD.load(ctx.project_dir)
-        design = DesignSpec.load(ctx.project_dir)
+        design = UISpec.load(ctx.project_dir)
         arch = Architecture.load(ctx.project_dir)
         p0 = [r.id for r in prd.requirements if r.priority == "p0"]
         await ctx.runner.invoke(
@@ -487,7 +636,8 @@ class Planning(Stage):
                     project_dir=ctx.project_dir,
                     inputs=existing(
                         PRD.full_path(ctx.project_dir),
-                        DesignSpec.full_path(ctx.project_dir),
+                        UXSpec.full_path(ctx.project_dir),
+                        UISpec.full_path(ctx.project_dir),
                         Architecture.full_path(ctx.project_dir),
                         MonetizationPlan.full_path(ctx.project_dir),
                     ),

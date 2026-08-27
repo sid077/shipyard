@@ -1,5 +1,5 @@
 # The app launches and the home screen renders its quota state.
-appId: com.shipyard.starter
+appId: com.shipyard.tipsplitter
 ---
 - launchApp:
     clearState: true

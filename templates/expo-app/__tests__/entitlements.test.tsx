@@ -2,7 +2,7 @@ import { render, screen, userEvent } from '@testing-library/react-native';
 import { Text } from 'react-native';
 
 import { MemorySink, setAnalyticsSink } from '@/analytics';
-import { Button } from '@/components/button';
+import { Button } from '@/ui';
 import {
   entitlementFor,
   firstLockedFeature,

@@ -42,7 +42,9 @@ def happy_scripts() -> dict:
         "analyst": _write(fx.opportunity, {"research/research.md": "# Research\n\nFull write-up.\n"}),
         "monetization": _write(fx.monetization),
         "pm": _write(fx.prd, {"product/prd.md": "# PRD\n\nProse spec.\n"}),
-        "designer": _write(fx.design),
+        "ux_architect": _write(fx.ux),
+        "ux_writer": _write(fx.copy_deck),
+        "ui_designer": _write(fx.ui, {"design/preview.html": fx.preview_html()}),
         "architect": _write(fx.architecture),
         "planner": _write(fx.backlog),
         "critic": fx.PASS_VERDICT,
@@ -132,10 +134,10 @@ def test_rejecting_g1_re_runs_the_owning_stage_with_the_notes(project):
     outcome, runner = drive(settings, project_dir, ledger, scripts)
 
     pm_tasks = [c.task for c in runner.calls if c.role == "pm"]
-    designer_tasks = [c.task for c in runner.calls if c.role == "designer"]
-    assert pm_tasks and designer_tasks, "both stages behind G1 must re-run"
+    design_tasks = [c.task for c in runner.calls if c.role == "ux_architect"]
+    assert pm_tasks and design_tasks, "both stages behind G1 must re-run"
     assert "Drop the history screen" in pm_tasks[0]
-    assert "Drop the history screen" in designer_tasks[0]
+    assert "Drop the history screen" in design_tasks[0]
     # The gate is re-armed and asked again, not silently skipped.
     assert outcome.gate == "G1"
     assert ledger.state.gate("G1").status == GateStatus.PENDING
