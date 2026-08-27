@@ -1,0 +1,23 @@
+# A free user hits the paywall at exactly the allowance in monetization.json
+# (5 use(s) of "unlimited_items"), and the paywall shows a real price.
+appId: com.shipyard.starter
+---
+- launchApp:
+    clearState: true
+- repeat:
+    times: 5
+    commands:
+      - tapOn:
+          id: 'add-item'
+- assertNotVisible:
+    id: 'paywall'
+- tapOn:
+    id: 'add-item'
+- assertVisible:
+    id: 'paywall'
+- assertVisible:
+    id: 'paywall-price'
+- tapOn:
+    id: 'paywall-dismiss'
+- assertNotVisible:
+    id: 'paywall'

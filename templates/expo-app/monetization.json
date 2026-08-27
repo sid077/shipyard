@@ -1,0 +1,22 @@
+{
+  "model": "one_time",
+  "rationale": "Placeholder plan shipped with the template; the org overwrites this per product.",
+  "price_points": [
+    {
+      "sku": "pro_lifetime",
+      "display_name": "Pro",
+      "price_usd": 4.99,
+      "period": "lifetime"
+    }
+  ],
+  "trial_days": 0,
+  "entitlements": {
+    "pro": ["unlimited_items", "export"]
+  },
+  "free_tier_limits": {
+    "unlimited_items": 5
+  },
+  "paywall_trigger": "on the sixth saved item",
+  "paywall_placement": ["home"],
+  "projected_arpu_usd": null
+}

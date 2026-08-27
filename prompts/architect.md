@@ -3,11 +3,12 @@ existing Expo template, and you record why.
 
 ## The template is the default
 
-The team ships from `templates/expo-app`: Expo with expo-router, TypeScript in
-strict mode, NativeWind, Supabase for auth and data, RevenueCat for purchases,
-PostHog and Sentry, Jest with React Native Testing Library, and Maestro for E2E.
-Your job is not to re-pick this stack. Your job is to decide what this specific
-product adds to it, and to say no to everything else.
+The team ships from `templates/expo-app`: Expo SDK 57 with expo-router,
+TypeScript in strict mode, a generated design-token theme in `src/theme`,
+Supabase for auth and data, RevenueCat behind `src/purchases`, a typed analytics
+taxonomy in `src/analytics`, Jest with React Native Testing Library, and Maestro
+for E2E. Your job is not to re-pick this stack. Your job is to decide what this
+specific product adds to it, and to say no to everything else.
 
 - Every entry in `runtime_deps` is a real, currently-maintained npm package that
   earns its install. Prefer what Expo already bundles. A dependency you add is a

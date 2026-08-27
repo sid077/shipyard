@@ -61,6 +61,23 @@ State lives in `.shipyard/state.json`, rewritten atomically after every step, so
 a crash costs nothing: `shipyard resume <slug>` picks up at the first stage that
 is not done.
 
+## The golden template
+
+`templates/expo-app` is the app the org clones and modifies; it never scaffolds
+from scratch. It is committed **green** — a fresh clone plus `npm ci` passes
+`scripts/verify.sh` — because nothing downstream can work if the template is red.
+
+Expo SDK 57, expo-router, TypeScript strict, a generated design-token theme,
+Supabase, RevenueCat, a closed analytics event union, Jest + React Native
+Testing Library, Maestro flows, and EAS build profiles.
+
+Monetization is designed in, not bolted on. `scripts/apply-product.mjs` projects
+the pipeline's `design.json` and `monetization.json` into `product.json`,
+`src/theme/tokens.generated.ts` and the Maestro flows, so the E2E paywall test
+always asserts against the exact free allowance the plan specifies. Features are
+gated with `useEntitlement('<feature key>')` — never a boolean, never a local
+flag.
+
 ## Usage
 
 ```bash
@@ -94,5 +111,13 @@ regardless of which runner is in play.
 ## Tests
 
 ```bash
-pytest          # 61 tests, no API calls
+pytest                                  # 70 harness tests, no API calls
+cd templates/expo-app && npm ci && npm run verify   # 27 template tests
 ```
+
+## Status
+
+Stages 00-50 (idea to backlog) are implemented and tested. The build loop
+(stage 60), hardening (70), release packaging (80) and handoff (90) are next;
+the git worktree plumbing they depend on is already in `workspace.py` and
+covered by tests.

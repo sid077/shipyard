@@ -1,0 +1,12 @@
+{
+  "name": "Shipyard Starter",
+  "slug": "shipyard-starter",
+  "tagline": "The studio's baseline app.",
+  "scheme": "shipyardstarter",
+  "version": "0.1.0",
+  "buildNumber": 1,
+  "bundleId": "com.shipyard.starter",
+  "packageName": "com.shipyard.starter",
+  "primaryColor": "#1f6feb",
+  "backgroundColor": "#ffffff"
+}

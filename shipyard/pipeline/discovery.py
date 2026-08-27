@@ -433,10 +433,11 @@ class ArchitectureStage(Stage):
                     ),
                     outputs=[Architecture],
                     guidance=(
-                        "The template already provides Expo, expo-router, TypeScript strict, "
-                        "NativeWind, Supabase, RevenueCat, PostHog, Sentry, Jest with React "
-                        "Native Testing Library, and Maestro. Do not list any of those in "
-                        "`runtime_deps`; list only what this product adds."
+                        "The template already provides Expo SDK 57, expo-router, TypeScript "
+                        "strict, a generated token theme, Supabase, RevenueCat, a typed "
+                        "analytics taxonomy, Jest with React Native Testing Library, and "
+                        "Maestro. Do not list any of those in `runtime_deps`; list only "
+                        "what this product adds."
                     ),
                     feedback=ctx.feedback,
                 ),
