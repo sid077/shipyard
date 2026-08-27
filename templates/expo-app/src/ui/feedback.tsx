@@ -42,6 +42,7 @@ export function Skeleton({
       testID={testID}
       accessibilityRole="progressbar"
       accessibilityLabel="Loading"
+      aria-label="Loading"
       style={{
         height,
         opacity: reduced ? 0.5 : shimmer,
@@ -56,8 +57,19 @@ export function Skeleton({
 export function Spinner({ label, testID }: { label?: string; testID?: string }) {
   const theme = useTheme();
   return (
-    <View testID={testID} style={styles.spinner} accessibilityRole="progressbar">
-      <ActivityIndicator color={theme.primary} />
+    <View
+      testID={testID}
+      style={styles.spinner}
+      accessibilityRole="progressbar"
+      accessibilityLabel={label ?? 'Loading'}
+      aria-label={label ?? 'Loading'}
+    >
+      <ActivityIndicator
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        aria-hidden
+        color={theme.primary}
+      />
       {label ? (
         <Text variant="caption" tone="muted">
           {label}

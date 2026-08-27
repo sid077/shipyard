@@ -95,6 +95,11 @@ export function Button({
       >
         {loading ? (
           <ActivityIndicator
+            // The button already announces `busy` and its own label; a second,
+            // nameless progressbar node is noise to a screen reader.
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            aria-hidden
             color={variant === 'secondary' || variant === 'ghost' ? theme.text : theme.onPrimary}
           />
         ) : (

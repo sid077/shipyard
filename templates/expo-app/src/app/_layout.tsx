@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import Head from 'expo-router/head';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 
@@ -36,6 +37,16 @@ export default function RootLayout() {
 
   return (
     <EntitlementsProvider>
+      {/*
+        The web export manages <head> with react-helmet, which empties whatever
+        the HTML shell declared. Setting the default title through the router's
+        own head API is what actually survives hydration - without it every
+        route ships with no <title>, which is a serious a11y violation.
+      */}
+      <Head>
+        <title>{product.name}</title>
+        <meta name="description" content={product.tagline} />
+      </Head>
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: theme.background },

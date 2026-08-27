@@ -29,7 +29,10 @@ That is why the whole pipeline is testable without spending a cent: swap
 | `analyst` | Market and competitor research, go/no-go recommendation |
 | `monetization` | Pricing model, tiers, trial, paywall placement |
 | `pm` | PRD, scope, testable acceptance criteria |
-| `designer` | Screens, flows, design tokens, copy |
+| `ux_architect` | Navigation, screen states, flows, gestures, motion |
+| `ui_designer` | Type, colour, components, screen composition, the G1 preview |
+| `ux_writer` | Every string the app renders |
+| `design_qa` | Looks at rendered screenshots and judges what probes cannot |
 | `architect` | Stack decisions, ADRs, data model, module map |
 | `planner` | Backlog of vertical slices |
 | `dev` | Implements one ticket in one isolated worktree |
@@ -47,10 +50,11 @@ That is why the whole pipeline is testable without spending a cent: swap
 | `s00_intake` | `idea.json` | |
 | `s10_research` | `research/opportunity.json`, `monetization.json` | **G0** |
 | `s20_definition` | `product/prd.json` | |
-| `s30_design` | `design/design.json` | **G1** |
+| `s30_design` | `design/{ux,ui,copy}.json`, `design/preview.html` | **G1** |
 | `s40_architecture` | `arch/architecture.json` | |
 | `s50_planning` | `backlog/tickets.json` | |
 | `s60_build` | `app/` on a green trunk, `build/build.json` | |
+| `s65_design_qa` | screenshots, `qa/{a11y,layout}.json`, `qa/design-qa.json` | |
 
 Every stage ends the same way: artifacts must validate against their contract,
 the stage's checks must exit zero, and the critic must raise no blocking
@@ -85,6 +89,31 @@ The scaffold step is deterministic code, not an agent task:
 the design and monetization artifacts into it, `npm ci` installs, and the whole
 thing must pass its own checks *before* the first ticket — so a broken scaffold
 fails where the cause is obvious rather than blaming the first engineer.
+
+## Design is verified, not asserted
+
+Three roles own design, in dependency order: `ux_architect` names the screens,
+states and copy keys; `ux_writer` fills them; `ui_designer` composes the screens
+and renders `design/preview.html`, so at G1 you approve by **looking at the
+product**, not by reading a table of screen IDs.
+
+The contracts compute rather than rubber-stamp. Every declared colour pair is
+checked for WCAG contrast — including muted text and pressed states — the type
+ramp must be monotonic with a body step of at least 15pt and legible line
+heights, touch targets must meet the platform minimum, and placeholder copy is
+rejected outright. **A palette that fails contrast fails the stage before a line
+of code is written**, with the ratio it achieved in the error.
+
+Then stage 65 renders the app for real: `expo export --platform web`, Playwright
+at two phone viewports, a screenshot of every route plus the component gallery,
+`@axe-core/playwright`, and DOM probes for touch targets under 44px, clipped
+text, horizontal overflow, text below 12px, and routes the UX spec declares that
+the app never implemented. Those failures block. Then `design_qa` — a role that
+can actually see the PNGs — judges hierarchy, rhythm, density and whether the
+screens look like one product.
+
+Blocking findings become tickets and run through the same `TicketRunner` the
+build loop uses, so a design fix cannot skip code review or leave trunk red.
 
 ## The golden template
 
@@ -136,13 +165,14 @@ regardless of which runner is in play.
 ## Tests
 
 ```bash
-pytest                                  # 89 harness tests, no API calls
-SHIPYARD_SLOW_TESTS=1 pytest tests/test_build_real.py   # one real npm build (~2 min)
+pytest                                  # 113 harness tests, no API calls
+SHIPYARD_SLOW_TESTS=1 pytest tests/test_build_real.py tests/test_design_qa_real.py
 cd templates/expo-app && npm ci && npm run verify   # 27 template tests
 ```
 
 ## Status
 
-Stages 00-60 are implemented and tested: an idea becomes an opportunity brief, a
-PRD, a design spec, an architecture, a backlog, and then a built app on a green
-trunk. Hardening (70), release packaging (80) and handoff (90) are next.
+Stages 00-65 are implemented and tested: an idea becomes an opportunity brief, a
+PRD, a UX and visual specification, an architecture, a backlog, a built app on a
+green trunk, and then a design pass that renders the app and measures it.
+Hardening (70), release packaging (80) and handoff (90) are next.

@@ -55,7 +55,7 @@ const styles = StyleSheet.create({
   track: { flexDirection: 'row', padding: spacing(1), gap: spacing(1) },
   segment: {
     flex: 1,
-    minHeight: MIN_TOUCH_TARGET - 8,
+    minHeight: MIN_TOUCH_TARGET,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing(3),

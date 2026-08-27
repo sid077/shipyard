@@ -759,6 +759,25 @@ class BuildReport(Artifact):
         return [t for t in self.tickets if t.status == "blocked"]
 
 
+class DesignQAReport(Artifact):
+    """What the rendered app actually looked like, and what was done about it."""
+
+    rel_path: ClassVar[str] = "qa/design-qa.json"
+
+    routes: list[str] = Field(min_length=1)
+    screenshots: list[str] = Field(min_length=1)
+    a11y_violations: int = 0
+    layout_findings: int = 0
+    verdict: Literal["pass", "fail"] = "pass"
+    summary: str = ""
+    findings: list[Finding] = []
+    fixes: list[TicketOutcome] = []
+
+    @property
+    def blocking(self) -> list[Finding]:
+        return [f for f in self.findings if f.severity == "blocking"]
+
+
 class HardeningReport(Artifact):
     rel_path: ClassVar[str] = "qa/hardening.json"
 
@@ -829,6 +848,7 @@ ARTIFACTS: dict[str, type[Artifact]] = {
         Architecture,
         Backlog,
         BuildReport,
+        DesignQAReport,
         HardeningReport,
         ReleaseManifest,
     )

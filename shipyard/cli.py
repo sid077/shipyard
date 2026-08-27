@@ -238,6 +238,15 @@ def doctor() -> None:
         problems.append(f"app template missing at {template}")
     elif not (template / "package.json").is_file():
         problems.append(f"app template at {template} has no package.json")
+    else:
+        for required in ("scripts/verify.sh", "scripts/apply-product.mjs", "scripts/screenshots.mjs",
+                         "src/ui/index.ts", "src/app/__gallery.tsx"):
+            if not (template / required).is_file():
+                problems.append(f"app template is missing {required}")
+
+    references = settings.repo_root / "references" / "design"
+    if not references.is_dir() or not list(references.glob("*.md")):
+        problems.append(f"design reference notes missing at {references}")
 
     if problems:
         for p in problems:
