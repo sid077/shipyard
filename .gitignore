@@ -6,3 +6,6 @@ projects/*/
 !projects/.gitkeep
 node_modules/
 .DS_Store
+*.egg-info/
+build/
+dist/
