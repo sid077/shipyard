@@ -9,6 +9,7 @@ end with no API calls.
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -102,8 +103,8 @@ class SDKRunner:
         self.ledger = ledger
         self.settings = settings or load_settings()
 
-    def _record_rate_limit(self, result: RoleResult, info: Any) -> None:
-        _record_rate_limit_impl(result, info, self.ledger, "")
+    def _record_rate_limit(self, result: RoleResult, info: Any, stage: str = "") -> None:
+        _record_rate_limit_impl(result, info, self.ledger, stage)
 
     def _system_prompt(self, spec: RoleSpec) -> str:
         path = spec.prompt_path(self.settings)
@@ -168,11 +169,15 @@ class SDKRunner:
 
         chunks: list[str] = []
         result = RoleResult(role=req.role)
+        saw_exhaustion = False
+        started = time.monotonic()
+        timeout = self.settings.role_timeout_s
         self.ledger.event(
             "role.started", stage=req.stage, role=req.role, model=spec.model, cwd=str(req.cwd)
         )
 
-        try:
+        async def drain() -> None:
+            nonlocal saw_exhaustion
             async for message in query(prompt=req.task, options=options):
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
@@ -181,7 +186,9 @@ class SDKRunner:
                         elif isinstance(block, ToolUseBlock):
                             result.tool_calls += 1
                 elif isinstance(message, RateLimitEvent):
-                    self._record_rate_limit(result, message.rate_limit_info)
+                    self._record_rate_limit(result, message.rate_limit_info, req.stage)
+                    if result.utilization.get(result.rate_limit_window or "", 0.0) >= 0.98:
+                        saw_exhaustion = True
                 elif isinstance(message, ResultMessage):
                     result.cost_usd = float(message.total_cost_usd or 0.0)
                     result.session_id = message.session_id
@@ -192,6 +199,29 @@ class SDKRunner:
                         result.rate_limited = True
                     if message.result:
                         chunks.append(message.result)
+
+        try:
+            await asyncio.wait_for(drain(), timeout=timeout)
+        except (TimeoutError, asyncio.TimeoutError):
+            elapsed = time.monotonic() - started
+            # A stall right after the window filled up is a usage problem, not a
+            # role problem: retrying it would only wait out the same window
+            # again. Diagnose it as what it is so the run pauses and resumes.
+            if saw_exhaustion:
+                result.rate_limited = True
+                result.terminal_reason = (
+                    f"stalled for {elapsed / 60:.0f} min with the usage window exhausted"
+                )
+            else:
+                result.is_error = True
+                result.terminal_reason = f"timed out after {elapsed / 60:.0f} min"
+            self.ledger.event(
+                "role.timeout",
+                stage=req.stage,
+                role=req.role,
+                seconds=round(elapsed),
+                exhausted=saw_exhaustion,
+            )
         except Exception as exc:  # a mid-run SDK failure is a role failure, not a crash
             result.is_error = True
             result.terminal_reason = f"exception: {type(exc).__name__}: {exc}"
@@ -244,6 +274,8 @@ def _record_rate_limit_impl(result: RoleResult, info: Any, ledger: Ledger, stage
     if not utilization and isinstance(top, (int, float)) and result.rate_limit_window:
         utilization[result.rate_limit_window] = float(top)
     result.utilization = utilization
+    if utilization or status != "allowed":
+        ledger.record_usage(status or "allowed", result.rate_limit_window, result.resets_at, utilization)
 
     if status == "rejected":
         result.rate_limited = True

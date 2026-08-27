@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 import claude_agent_sdk
@@ -218,3 +219,61 @@ def test_the_options_confine_writes_but_widen_reads(runner):
     # No ceiling unless one was asked for.
     assert options.max_budget_usd is None
     assert options.max_turns == get_role("ux_architect").max_turns
+
+
+def test_a_stalled_role_times_out_instead_of_hanging_the_org(runner, monkeypatch):
+    """The stall a real run produced: the CLI retrying silently behind an
+    exhausted window, holding sockets, burning no CPU, and reporting nothing."""
+    sdk, ledger, project_dir = runner
+    sdk.settings = replace(sdk.settings, role_timeout_s=1)
+
+    async def never_returns(*, prompt, options, **kwargs):
+        await asyncio.sleep(30)
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(claude_agent_sdk, "query", never_returns)
+
+    result = asyncio.run(sdk.invoke(request_for(project_dir)))
+
+    assert result.is_error
+    assert "timed out" in result.terminal_reason
+    assert not result.rate_limited, "a plain stall is not a usage problem"
+
+
+def test_a_stall_behind_an_exhausted_window_is_diagnosed_as_a_usage_limit(
+    runner, monkeypatch
+):
+    """Retrying this would only wait out the same window again, so it must
+    pause the run rather than burn a repair attempt."""
+    sdk, ledger, project_dir = runner
+    sdk.settings = replace(sdk.settings, role_timeout_s=1)
+
+    async def fills_the_window_then_hangs(*, prompt, options, **kwargs):
+        yield rate_limit_message("allowed_warning", {"five_hour": 0.99})
+        await asyncio.sleep(30)
+
+    monkeypatch.setattr(claude_agent_sdk, "query", fills_the_window_then_hangs)
+
+    metered = MeteredRunner(sdk, ledger)
+    with pytest.raises(UsageLimitReached):
+        asyncio.run(metered.invoke(request_for(project_dir)))
+
+
+def test_the_usage_window_is_recorded_as_it_moves_not_only_at_the_end(
+    runner, monkeypatch
+):
+    """A call that never returns would otherwise leave `status` showing nothing."""
+    sdk, ledger, project_dir = runner
+    sdk.settings = replace(sdk.settings, role_timeout_s=1)
+
+    async def warns_then_hangs(*, prompt, options, **kwargs):
+        yield rate_limit_message("allowed_warning", {"five_hour": 0.9, "seven_day": 0.2})
+        await asyncio.sleep(30)
+
+    monkeypatch.setattr(claude_agent_sdk, "query", warns_then_hangs)
+
+    asyncio.run(sdk.invoke(request_for(project_dir)))
+
+    # Written mid-call, while the role was still stalled.
+    assert ledger.state.usage.utilization == {"five_hour": 0.9, "seven_day": 0.2}
+    assert ledger.state.usage.status == "allowed_warning"

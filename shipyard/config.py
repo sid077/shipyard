@@ -67,6 +67,12 @@ class Settings:
     check_timeout_s: int = field(
         default_factory=lambda: _env_int("SHIPYARD_CHECK_TIMEOUT_S", 900)
     )
+    # Wall-clock ceiling for one role invocation. Without this a role that
+    # stalls - most often the CLI silently retrying behind an exhausted usage
+    # window - hangs the whole org with no signal to the operator.
+    role_timeout_s: int = field(
+        default_factory=lambda: _env_int("SHIPYARD_ROLE_TIMEOUT_S", 1800)
+    )
 
     def project_dir(self, slug: str) -> Path:
         return self.projects_dir / slug
