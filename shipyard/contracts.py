@@ -148,6 +148,76 @@ class MonetizationPlan(Artifact):
         return self
 
 
+class Candidate(BaseModel):
+    """One opportunity the scout thinks is worth a look, with its evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rank: int = Field(ge=1)
+    name: str
+    one_liner: str
+    problem: str
+    target_user: str
+    #: The numbers that show people already want this. Not a hunch.
+    demand_evidence: str
+    why_now: str
+    wedge: str
+    monetization: str
+    competitors: list[Competitor] = Field(min_length=2)
+    #: Why this suits *this* studio's constraints specifically.
+    fit_rationale: str
+    risks: list[Risk] = Field(min_length=1)
+    effort_estimate_weeks: float = Field(gt=0)
+    verdict: Literal["pursue", "watch", "reject"]
+    sources: list[str] = Field(min_length=2)
+
+
+class Shortlist(Artifact):
+    """The scout's survey of a space, ranked.
+
+    Distinct from `Opportunity`, which judges one idea the operator already
+    chose. This is what gets produced when nobody has chosen yet.
+    """
+
+    rel_path: ClassVar[str] = "scouting/shortlist.json"
+
+    searched_for: str
+    method: str
+    candidates: list[Candidate] = Field(min_length=3)
+    #: The candidate to build next, or "" when none of them earn it. An honest
+    #: empty answer is a valid outcome and must stay possible.
+    recommended: str = ""
+    #: Categories looked at and ruled out, each with the reason.
+    also_considered: list[str] = []
+
+    @model_validator(mode="after")
+    def _ranking_and_pick_hold_up(self) -> Self:
+        ranks = sorted(c.rank for c in self.candidates)
+        if ranks != list(range(1, len(self.candidates) + 1)):
+            raise ValueError(f"ranks must be 1..{len(self.candidates)} with no gaps, got {ranks}")
+        names = [c.name for c in self.candidates]
+        if len(set(names)) != len(names):
+            raise ValueError(f"two candidates share a name: {names}")
+        if self.recommended:
+            match = next((c for c in self.candidates if c.name == self.recommended), None)
+            if match is None:
+                raise ValueError(
+                    f"recommended {self.recommended!r} is not one of {names}"
+                )
+            if match.verdict != "pursue":
+                raise ValueError(
+                    f"recommended {self.recommended!r} is marked {match.verdict!r}; "
+                    f"only a 'pursue' candidate may be recommended"
+                )
+        return self
+
+    @property
+    def pursue(self) -> list[Candidate]:
+        return sorted(
+            (c for c in self.candidates if c.verdict == "pursue"), key=lambda c: c.rank
+        )
+
+
 # --------------------------------------------------------------------------
 # Stage 20 - definition
 # --------------------------------------------------------------------------
@@ -841,6 +911,7 @@ ARTIFACTS: dict[str, type[Artifact]] = {
         Idea,
         Opportunity,
         MonetizationPlan,
+        Shortlist,
         PRD,
         UXSpec,
         UISpec,

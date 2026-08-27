@@ -45,6 +45,7 @@ class Settings:
     projects_dir: Path = field(default_factory=lambda: REPO_ROOT / "projects")
     templates_dir: Path = field(default_factory=lambda: REPO_ROOT / "templates")
     prompts_dir: Path = field(default_factory=lambda: REPO_ROOT / "prompts")
+    scouting_dir: Path = field(default_factory=lambda: REPO_ROOT / "scouting")
 
     # How many times a role may be re-invoked with critic feedback before the
     # stage escalates to a human.

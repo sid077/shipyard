@@ -26,6 +26,7 @@ from shipyard.contracts import (
     Requirement,
     Risk,
     ScreenComposition,
+    Shortlist,
     ScreenState,
     Section,
     SuccessMetric,
@@ -331,3 +332,44 @@ def preview_html() -> str:
 </body>
 {padding}
 """
+
+
+def candidate(rank: int, name: str, verdict: str = "pursue") -> dict:
+    return {
+        "rank": rank,
+        "name": name,
+        "one_liner": f"{name} in one line.",
+        "problem": "A real problem people already pay to avoid.",
+        "target_user": "Tradespeople who quote on site.",
+        "demand_evidence": "Top free incumbent has 500k installs and 4,100 reviews.",
+        "why_now": "Platform vision APIs made on-device capture viable this year.",
+        "wedge": "Works with no signal, which the incumbents do not.",
+        "monetization": "One-time $4.99 unlock; comparable apps charge $2.99-$5.99.",
+        "competitors": [
+            {"name": "Incumbent A", "url": "https://example.com/a", "pricing": "Free with ads",
+             "strengths": ["reach"], "weaknesses": ["needs signal"]},
+            {"name": "Incumbent B", "url": "https://example.com/b", "pricing": "$3.99 once",
+             "strengths": ["simple"], "weaknesses": ["no export"]},
+        ],
+        "fit_rationale": "Offline, no backend, small scope, one-time unlock.",
+        "risks": [{"description": "Category is crowded", "severity": "medium", "mitigation": "Compete on offline"}],
+        "effort_estimate_weeks": 4.0,
+        "verdict": verdict,
+        "sources": ["https://example.com/a", "https://example.com/b"],
+    }
+
+
+def shortlist(recommended: str = "Alpha") -> Shortlist:
+    return Shortlist.model_validate(
+        {
+            "searched_for": "offline mobile utilities with a one-time unlock",
+            "method": "store listings and third-party install trackers",
+            "candidates": [
+                candidate(1, "Alpha", "pursue"),
+                candidate(2, "Beta", "watch"),
+                candidate(3, "Gamma", "reject"),
+            ],
+            "recommended": recommended,
+            "also_considered": ["Two-sided marketplaces - need liquidity the studio cannot seed"],
+        }
+    )

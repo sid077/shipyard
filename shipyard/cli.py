@@ -301,6 +301,59 @@ def list_projects() -> None:
 
 
 @app.command()
+def scout(
+    focus: Annotated[str, typer.Option(help="Narrow the search, e.g. 'offline utilities for tradespeople'.")] = "",
+    count: Annotated[int, typer.Option(help="How many candidates to shortlist.")] = 5,
+    slug: Annotated[str, typer.Option(help="Name for this scouting pass.")] = "",
+) -> None:
+    """Survey the market for opportunities worth building.
+
+    Stage 10 judges an idea you already chose. This runs when nobody has chosen
+    yet, and it is allowed to come back recommending nothing.
+    """
+    from .contracts import Shortlist
+    from .scout import prepare, scout as run_scout
+
+    settings = load_settings()
+    directory, ledger = prepare(settings, slug or None)
+    console.print(f"Scouting into [bold]{directory}[/bold]")
+    if focus:
+        console.print(f"Focus: {focus}")
+
+    runner = SDKRunner(ledger, settings)
+    from .runner import MeteredRunner
+
+    try:
+        shortlist = asyncio.run(
+            run_scout(MeteredRunner(runner, ledger), ledger, directory, focus, count)
+        )
+    except Exception as exc:
+        console.print(f"\n[red]scouting failed[/red]: {exc}")
+        console.print(f"Spent ${ledger.state.cost_usd:.2f}")
+        _print_usage(ledger)
+        raise typer.Exit(1) from None
+
+    console.print()
+    for candidate in sorted(shortlist.candidates, key=lambda c: c.rank):
+        colour = {"pursue": "green", "watch": "yellow", "reject": "dim"}[candidate.verdict]
+        console.print(
+            f"[{colour}]{candidate.rank}. {candidate.name}[/] "
+            f"[dim]({candidate.verdict}, ~{candidate.effort_estimate_weeks}w)[/dim]"
+        )
+        console.print(f"   {candidate.one_liner}")
+        console.print(f"   [dim]{candidate.demand_evidence[:160]}[/dim]\n")
+
+    if shortlist.recommended:
+        console.print(f"[bold green]Recommended:[/bold green] {shortlist.recommended}")
+    else:
+        console.print("[yellow]Nothing cleared the bar.[/yellow] See also_considered for why.")
+
+    console.print(f"\nWrote {Shortlist.full_path(directory)}")
+    console.print(f"Spent ${ledger.state.cost_usd:.2f}")
+    _print_usage(ledger)
+
+
+@app.command()
 def doctor() -> None:
     """Check the harness itself: stage graph, role prompts, template."""
     settings = load_settings()
