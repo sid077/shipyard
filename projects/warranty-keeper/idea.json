@@ -1,0 +1,16 @@
+{
+  "slug": "warranty-keeper",
+  "title": "Warranty Keeper",
+  "one_liner": "Never lose a receipt or miss a warranty window again.",
+  "brief": "People buy appliances, electronics and tools that carry a warranty, then lose the receipt and forget the expiry date. When something breaks, they cannot prove purchase and pay for a repair they were entitled to for free.\n\nThe app should let someone photograph a receipt, record what they bought, where, for how much, and when the warranty ends, and then remind them before it lapses. It must work entirely offline with no account required: the value is at the shop counter and in the kitchen drawer, not in the cloud.\n\nMonetize with a one-time unlock rather than a subscription. Free users should be able to track a useful number of items before hitting the paywall.",
+  "platforms": [
+    "ios",
+    "android"
+  ],
+  "constraints": [
+    "Offline-first: no account, no backend required for the core value",
+    "One-time purchase, not a subscription",
+    "The camera and local notifications are the only device capabilities assumed"
+  ],
+  "source": "human"
+}
