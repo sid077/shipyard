@@ -312,13 +312,20 @@ def scout(
     yet, and it is allowed to come back recommending nothing.
     """
     from .contracts import Shortlist
-    from .scout import prepare, scout as run_scout
+    from .scout import has_sweep, prepare, scout as run_scout, sweep_path
 
     settings = load_settings()
     directory, ledger = prepare(settings, slug or None)
     console.print(f"Scouting into [bold]{directory}[/bold]")
     if focus:
         console.print(f"Focus: {focus}")
+    if has_sweep(directory):
+        console.print(
+            f"[cyan]Resuming[/cyan] from existing sweep notes "
+            f"({sweep_path(directory).stat().st_size // 1024}KB) — skipping the sweep."
+        )
+    else:
+        console.print("Phase 1 of 2: sweeping for leads")
 
     runner = SDKRunner(ledger, settings)
     from .runner import MeteredRunner
@@ -329,6 +336,12 @@ def scout(
         )
     except Exception as exc:
         console.print(f"\n[red]scouting failed[/red]: {exc}")
+        if has_sweep(directory):
+            console.print(
+                f"[green]The sweep notes survived[/green]: {sweep_path(directory)}\n"
+                f"Re-run the same command once the window reopens and it will "
+                f"resume from them rather than start over."
+            )
         console.print(f"Spent ${ledger.state.cost_usd:.2f}")
         _print_usage(ledger)
         raise typer.Exit(1) from None
@@ -349,6 +362,7 @@ def scout(
         console.print("[yellow]Nothing cleared the bar.[/yellow] See also_considered for why.")
 
     console.print(f"\nWrote {Shortlist.full_path(directory)}")
+    console.print(f"Sweep notes: {sweep_path(directory)}")
     console.print(f"Spent ${ledger.state.cost_usd:.2f}")
     _print_usage(ledger)
 
