@@ -20,6 +20,34 @@ from .ledger import Ledger
 from .roles import RoleSpec, get_role
 
 
+class RoleError(RuntimeError):
+    """A role invocation failed for a reason the role might recover from."""
+
+    def __init__(self, role: str, reason: str) -> None:
+        super().__init__(f"role {role!r} failed: {reason}")
+        self.role = role
+        self.reason = reason
+
+
+class UsageLimitReached(RuntimeError):
+    """The account's rate-limit window is exhausted.
+
+    Not a role failure and not repairable: retrying only wastes attempts. The
+    pipeline checkpoints and stops so the run can resume once the window resets.
+    """
+
+    def __init__(self, window: str | None, resets_at: int | None) -> None:
+        self.window = window or "usage"
+        self.resets_at = resets_at
+        when = ""
+        if resets_at:
+            from datetime import datetime, timezone
+
+            stamp = datetime.fromtimestamp(resets_at, timezone.utc)
+            when = f", resets {stamp.strftime('%H:%M UTC on %d %b')}"
+        super().__init__(f"the {self.window} usage window is exhausted{when}")
+
+
 @dataclass
 class RoleRequest:
     role: str
@@ -50,6 +78,12 @@ class RoleResult:
     tool_calls: int = 0
     denials: list[str] = field(default_factory=list)
     structured: Any = None
+    #: Set when the account's usage window was exhausted during this call.
+    rate_limited: bool = False
+    rate_limit_window: str | None = None
+    resets_at: int | None = None
+    #: Per-window utilization, 0.0-1.0, as last reported by the CLI.
+    utilization: dict[str, float] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -66,6 +100,9 @@ class SDKRunner:
     def __init__(self, ledger: Ledger, settings: Settings | None = None) -> None:
         self.ledger = ledger
         self.settings = settings or load_settings()
+
+    def _record_rate_limit(self, result: RoleResult, info: Any) -> None:
+        _record_rate_limit_impl(result, info, self.ledger, "")
 
     def _system_prompt(self, spec: RoleSpec) -> str:
         path = spec.prompt_path(self.settings)
@@ -95,9 +132,16 @@ class SDKRunner:
             cwd=str(req.cwd),
             add_dirs=[str(r) for r in visible if Path(r) != Path(req.cwd)],
             max_turns=spec.max_turns,
-            max_budget_usd=req.budget_usd or spec.budget_usd,
+            # `max_turns` stays: it bounds a confused role, which is a different
+            # risk from spend. A dollar ceiling is applied only when one is
+            # explicitly configured - see `Settings.project_budget_usd`.
+            max_budget_usd=req.budget_usd,
             # Hermetic: no user/project settings, CLAUDE.md or plugins leak in.
             setting_sources=[],
+            # Merged into the inherited environment by the Python SDK, never
+            # replacing it - which is how a role subprocess picks up whatever
+            # credentials this process was started with. Never put an auth
+            # variable in here: an empty one would shadow a working login.
             env={
                 "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "1",
                 "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "4",
@@ -110,6 +154,7 @@ class SDKRunner:
     async def invoke(self, req: RoleRequest) -> RoleResult:
         from claude_agent_sdk import (
             AssistantMessage,
+            RateLimitEvent,
             ResultMessage,
             TextBlock,
             ToolUseBlock,
@@ -134,12 +179,16 @@ class SDKRunner:
                             chunks.append(block.text)
                         elif isinstance(block, ToolUseBlock):
                             result.tool_calls += 1
+                elif isinstance(message, RateLimitEvent):
+                    self._record_rate_limit(result, message.rate_limit_info)
                 elif isinstance(message, ResultMessage):
                     result.cost_usd = float(message.total_cost_usd or 0.0)
                     result.session_id = message.session_id
                     result.terminal_reason = message.terminal_reason or message.subtype
                     result.is_error = bool(message.is_error)
                     result.structured = message.structured_output
+                    if message.api_error_status == 429:
+                        result.rate_limited = True
                     if message.result:
                         chunks.append(message.result)
         except Exception as exc:  # a mid-run SDK failure is a role failure, not a crash
@@ -151,6 +200,14 @@ class SDKRunner:
 
         result.text = "\n".join(c for c in chunks if c).strip()
         result.denials = denials
+        if result.rate_limited:
+            self.ledger.event(
+                "usage.limit_reached",
+                stage=req.stage,
+                role=req.role,
+                window=result.rate_limit_window,
+                resets_at=result.resets_at,
+            )
         self.ledger.event(
             "role.finished",
             stage=req.stage,
@@ -162,6 +219,41 @@ class SDKRunner:
             denials=denials,
         )
         return result
+
+
+def _record_rate_limit_impl(result: RoleResult, info: Any, ledger: Ledger, stage: str) -> None:
+    """Read the CLI's rate-limit report onto the result.
+
+    The top-level `utilization` came back `None` in practice; the per-window
+    numbers live under `raw["unifiedWindows"]`, so read both and prefer whatever
+    is actually populated.
+    """
+    status = getattr(info, "status", None)
+    result.rate_limit_window = getattr(info, "rate_limit_type", None)
+    result.resets_at = getattr(info, "resets_at", None)
+
+    raw = getattr(info, "raw", None) or {}
+    windows = raw.get("unifiedWindows") or {}
+    utilization: dict[str, float] = {}
+    for name, window in windows.items():
+        value = window.get("utilization")
+        if isinstance(value, (int, float)):
+            utilization[name] = float(value)
+    top = getattr(info, "utilization", None)
+    if not utilization and isinstance(top, (int, float)) and result.rate_limit_window:
+        utilization[result.rate_limit_window] = float(top)
+    result.utilization = utilization
+
+    if status == "rejected":
+        result.rate_limited = True
+    elif status == "allowed_warning":
+        ledger.event(
+            "usage.warning",
+            stage=stage,
+            window=result.rate_limit_window,
+            utilization=utilization,
+            resets_at=result.resets_at,
+        )
 
 
 #: A scripted response: either literal text, or a callable that may also write
@@ -226,6 +318,22 @@ class MeteredRunner:
         self.ledger.add_cost(
             req.stage, req.role, result.cost_usd, terminal_reason=result.terminal_reason
         )
+        if result.utilization or result.rate_limited:
+            self.ledger.record_usage(
+                "rejected" if result.rate_limited else "allowed",
+                result.rate_limit_window,
+                result.resets_at,
+                result.utilization,
+            )
+
+        # A failed invocation used to vanish here: the role produced nothing,
+        # the artifact contract failed, and the stage burned every repair
+        # attempt on a problem no role could fix. Raising makes the cause
+        # visible at the point it happened.
+        if result.rate_limited:
+            raise UsageLimitReached(result.rate_limit_window, result.resets_at)
+        if result.is_error:
+            raise RoleError(req.role, result.terminal_reason)
         return result
 
 

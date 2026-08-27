@@ -65,6 +65,25 @@ class GateRecord(BaseModel):
     status: GateStatus = GateStatus.NOT_REACHED
     notes: str = ""
     decided_at: str | None = None
+    #: "human" or "machine". A gate approved by a flag must never look like one
+    #: a person actually read.
+    decided_by: str | None = None
+
+
+class UsageWindow(BaseModel):
+    """The account's rate-limit position, as last reported by the CLI.
+
+    This is the ceiling that actually stops a run - a dollar estimate is not.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str = "allowed"
+    window: str | None = None
+    resets_at: int | None = None
+    #: window name -> fraction consumed, 0.0-1.0
+    utilization: dict[str, float] = {}
+    observed_at: str | None = None
 
 
 class ProjectState(BaseModel):
@@ -79,6 +98,7 @@ class ProjectState(BaseModel):
     gates: dict[str, GateRecord] = {}
     tickets: dict[str, TicketStatus] = {}
     cost_usd: float = 0.0
+    usage: UsageWindow = UsageWindow()
     blocked_reason: str | None = None
 
     def stage(self, key: str) -> StageRecord:
@@ -209,6 +229,22 @@ class Ledger:
         self.state.blocked_reason = f"{key}: {reason}"
         self.save()
         self.event("stage.blocked", stage=key, reason=reason)
+
+    def record_usage(
+        self,
+        status: str,
+        window: str | None,
+        resets_at: int | None,
+        utilization: dict[str, float],
+    ) -> None:
+        self.state.usage = UsageWindow(
+            status=status,
+            window=window,
+            resets_at=resets_at,
+            utilization=utilization or self.state.usage.utilization,
+            observed_at=_now(),
+        )
+        self.save()
 
     def write_inbox(self, name: str, body: str) -> Path:
         self.inbox.mkdir(parents=True, exist_ok=True)

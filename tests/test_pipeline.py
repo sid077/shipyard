@@ -7,6 +7,7 @@ loop, real check execution - without a single API call.
 from __future__ import annotations
 
 import asyncio
+import tempfile
 from dataclasses import replace
 from pathlib import Path
 
@@ -19,7 +20,7 @@ from shipyard.gates import Gate, decide
 from shipyard.ledger import GateStatus, Ledger, StageStatus
 from shipyard.pipeline import build_context, run_pipeline
 from shipyard.pipeline.registry import STAGES
-from shipyard.runner import RoleRequest, ScriptedRunner
+from shipyard.runner import RoleError, RoleRequest, ScriptedRunner, UsageLimitReached
 from shipyard.workspace import create_project
 
 
@@ -278,3 +279,150 @@ def test_state_survives_a_fresh_ledger_open(project):
     assert reopened.state.stage("s10_research").status == StageStatus.DONE
     assert reopened.state.gate("G0").status == GateStatus.PENDING
     assert MonetizationPlan.load(project_dir).model == "one_time"
+
+
+# --------------------------------------------------------------------------
+# Spend ceilings, usage windows, and errors that used to vanish
+# --------------------------------------------------------------------------
+
+
+def test_no_ceiling_is_set_by_default(project):
+    """The account's usage window is the real limit; a dollar estimate is not."""
+    settings, project_dir, ledger = project
+    assert Settings().project_budget_usd is None
+    assert Settings().stage_budget_usd is None
+
+    outcome, _ = drive(settings, project_dir, ledger, happy_scripts(), cost=500.0)
+
+    assert outcome.status == "awaiting_gate", "an unset ceiling must never halt a run"
+    assert ledger.state.cost_usd >= 500.0
+
+
+def test_an_explicit_ceiling_still_halts(project):
+    settings, project_dir, ledger = project
+    settings = replace(settings, project_budget_usd=1.0)
+
+    outcome, _ = drive(settings, project_dir, ledger, happy_scripts(), cost=0.6)
+
+    assert outcome.status == "budget_exceeded"
+
+
+def test_a_metered_runner_raises_rather_than_swallowing_a_failure():
+    """The bug this replaces: an errored role produced nothing, failed the
+    artifact contract, and burned every repair attempt on an unfixable cause."""
+    from shipyard.runner import MeteredRunner, RoleResult, UsageLimitReached
+
+    class Stub:
+        def __init__(self, result):
+            self.result = result
+
+        async def invoke(self, req):
+            return self.result
+
+    ledger = Ledger.create(Path(tempfile.mkdtemp()) / "p", "demo", "Demo")
+    request = RoleRequest(role="analyst", task="t", cwd=Path("."), stage="s10_research")
+
+    limited = RoleResult(
+        role="analyst", text="", rate_limited=True,
+        rate_limit_window="five_hour", resets_at=1787872200,
+        utilization={"five_hour": 1.0},
+    )
+    with pytest.raises(UsageLimitReached) as caught:
+        asyncio.run(MeteredRunner(Stub(limited), ledger).invoke(request))
+    assert caught.value.resets_at == 1787872200
+    assert "five_hour" in str(caught.value)
+    # The window is recorded on state, so `status` can report it after the fact.
+    assert ledger.state.usage.status == "rejected"
+    assert ledger.state.usage.utilization == {"five_hour": 1.0}
+
+    errored = RoleResult(role="analyst", text="", is_error=True, terminal_reason="api_error 500")
+    with pytest.raises(RoleError, match="api_error 500"):
+        asyncio.run(MeteredRunner(Stub(errored), ledger).invoke(request))
+
+
+def test_a_usage_limit_pauses_the_run_without_spending_a_repair_attempt(project):
+    settings, project_dir, ledger = project
+
+    def exhausted(req: RoleRequest) -> str:
+        raise UsageLimitReached("five_hour", 1787872200)
+
+    outcome, _ = drive(settings, project_dir, ledger, happy_scripts() | {"analyst": exhausted})
+
+    assert outcome.status == "limit_reached"
+    assert outcome.resets_at == 1787872200
+    assert outcome.resumable, "a paused run must resume, not restart"
+    assert "shipyard resume" in outcome.message
+
+    # The stage is left ready to run again, with its attempt given back.
+    record = ledger.state.stage("s10_research")
+    assert record.status == StageStatus.PENDING
+    assert record.attempts == 0
+    assert ledger.state.stage("s10_research").note == ""
+
+
+def test_a_paused_run_carries_on_from_where_it_stopped(project):
+    settings, project_dir, ledger = project
+    calls = {"n": 0}
+
+    def flaky(req: RoleRequest) -> str:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise UsageLimitReached("five_hour", 1787872200)
+        return _write(fx.opportunity, {"research/research.md": "# Research\n"})(req)
+
+    scripts = happy_scripts() | {"analyst": flaky}
+    outcome, _ = drive(settings, project_dir, ledger, scripts)
+    assert outcome.status == "limit_reached"
+
+    # Nothing was lost: the window reopens and the same command carries on.
+    outcome, _ = drive(settings, project_dir, ledger, scripts)
+    assert outcome.status == "awaiting_gate"
+    assert outcome.gate == "G0"
+    assert ledger.state.stage("s10_research").attempts == 1
+
+
+def test_an_api_error_is_handed_back_as_repairable_feedback(project):
+    settings, project_dir, ledger = project
+    attempts = {"n": 0}
+
+    def flaky(req: RoleRequest) -> str:
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise RoleError("analyst", "api_error 529 overloaded")
+        return _write(fx.opportunity, {"research/research.md": "# Research\n"})(req)
+
+    outcome, runner = drive(settings, project_dir, ledger, happy_scripts() | {"analyst": flaky})
+
+    assert outcome.status == "awaiting_gate"
+    assert attempts["n"] == 2
+    second = [c.task for c in runner.calls if c.role == "analyst"][1]
+    assert "529 overloaded" in second, "the role should see why its last attempt died"
+
+
+def test_auto_approving_a_gate_records_that_no_human_read_it(project):
+    settings, project_dir, ledger = project
+    runner = ScriptedRunner(happy_scripts())
+    ctx = build_context(project_dir, ledger, runner, settings)
+    ctx.auto_approve = frozenset({"G0"})
+
+    outcome = asyncio.run(run_pipeline(STAGES, ctx, until="s50_planning"))
+
+    assert outcome.gate == "G1", "only G0 was auto-approved"
+    g0 = ledger.state.gate("G0")
+    assert g0.status == GateStatus.APPROVED
+    assert g0.decided_by == "machine"
+    assert "auto-approve" in g0.notes
+    # G1 still waits for a person.
+    assert ledger.state.gate("G1").status == GateStatus.PENDING
+
+
+def test_each_completed_stage_can_be_checkpointed(project):
+    settings, project_dir, ledger = project
+    checkpointed: list[str] = []
+    runner = ScriptedRunner(happy_scripts())
+    ctx = build_context(project_dir, ledger, runner, settings)
+    ctx.on_stage_done = checkpointed.append
+
+    asyncio.run(run_pipeline(STAGES, ctx, until="s50_planning"))
+
+    assert checkpointed == ["s00_intake", "s10_research"], "one hook per completed stage"

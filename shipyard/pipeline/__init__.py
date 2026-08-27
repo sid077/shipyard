@@ -19,6 +19,7 @@ lands in `inbox/`.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -29,7 +30,7 @@ from ..contracts import Artifact
 from ..critic import audit
 from ..gates import GATE_OWNER_STAGE, Gate
 from ..ledger import GateStatus, Ledger, StageStatus
-from ..runner import MeteredRunner, Runner
+from ..runner import MeteredRunner, Runner, UsageLimitReached
 from ..verify import Check, CheckReport, run_checks
 
 
@@ -41,6 +42,10 @@ class StageContext:
     project_dir: Path
     #: Feedback carried into the current attempt (critic, checks, or operator).
     feedback: str = ""
+    #: Gates the operator asked to be approved without them looking.
+    auto_approve: frozenset[str] = frozenset()
+    #: Run after each completed stage, e.g. to commit the artifacts.
+    on_stage_done: Callable[[str], None] | None = None
 
     @property
     def app_dir(self) -> Path:
@@ -116,7 +121,9 @@ class Stage(ABC):
         ]
 
 
-Status = Literal["complete", "awaiting_gate", "blocked", "budget_exceeded"]
+Status = Literal[
+    "complete", "awaiting_gate", "blocked", "budget_exceeded", "limit_reached"
+]
 
 
 @dataclass
@@ -127,9 +134,17 @@ class PipelineOutcome:
     gate: str | None = None
     stages_run: list[str] = field(default_factory=list)
 
+    #: When a usage window stopped the run, when it reopens.
+    resets_at: int | None = None
+
     @property
     def ok(self) -> bool:
         return self.status in ("complete", "awaiting_gate")
+
+    @property
+    def resumable(self) -> bool:
+        """Whether `shipyard resume` will simply carry on."""
+        return self.status in ("awaiting_gate", "limit_reached")
 
 
 async def run_stage(stage: Stage, ctx: StageContext) -> tuple[bool, str]:
@@ -147,6 +162,14 @@ async def run_stage(stage: Stage, ctx: StageContext) -> tuple[bool, str]:
         ledger.stage_started(stage.key)
         try:
             await stage.execute(ctx)
+        except UsageLimitReached:
+            # Not the role's fault and not repairable. Give the attempt back so
+            # resuming after the window resets starts from a clean slate.
+            record = ledger.state.stage(stage.key)
+            record.attempts = max(record.attempts - 1, 0)
+            record.status = StageStatus.PENDING
+            ledger.save()
+            raise
         except Exception as exc:
             last_problem = f"stage raised {type(exc).__name__}: {exc}"
             ledger.event("stage.exception", stage=stage.key, error=last_problem)
@@ -201,7 +224,13 @@ async def run_stage(stage: Stage, ctx: StageContext) -> tuple[bool, str]:
 
 
 def _over_budget(ledger: Ledger, settings: Settings) -> str:
-    """Return a reason the run must stop on spend, or an empty string."""
+    """Return a reason the run must stop on spend, or an empty string.
+
+    Unset by default: the account's usage window is the real ceiling, so a
+    dollar estimate only stops the run when someone deliberately asked it to.
+    """
+    if settings.project_budget_usd is None:
+        return ""
     if ledger.state.cost_usd < settings.project_budget_usd:
         return ""
     return (
@@ -235,7 +264,20 @@ async def run_pipeline(
 
         if record.status != StageStatus.DONE:
             ctx.feedback = pending_notes.get(stage.key, "")
-            ok, message = await run_stage(stage, ctx)
+            try:
+                ok, message = await run_stage(stage, ctx)
+            except UsageLimitReached as limit:
+                ledger.event(
+                    "run.paused", stage=stage.key, reason=str(limit), resets_at=limit.resets_at
+                )
+                return PipelineOutcome(
+                    "limit_reached",
+                    f"{limit}. Nothing is lost - run `shipyard resume "
+                    f"{ledger.state.slug}` once it reopens.",
+                    stage.key,
+                    stages_run=ran,
+                    resets_at=limit.resets_at,
+                )
             if not ok:
                 ledger.stage_blocked(stage.key, message)
                 ledger.write_inbox(
@@ -249,6 +291,8 @@ async def run_pipeline(
                 return PipelineOutcome("blocked", message, stage.key, stages_run=ran)
             ran.append(stage.key)
             pending_notes.pop(stage.key, None)
+            if ctx.on_stage_done:
+                ctx.on_stage_done(stage.key)
             over = _over_budget(ledger, settings)
             if over:
                 return PipelineOutcome("budget_exceeded", over, stage.key, stages_run=ran)
@@ -272,6 +316,17 @@ async def run_pipeline(
                 continue
             if state != GateStatus.APPROVED:
                 gates.request(ledger, gate, stage.briefing(ctx))
+                if gate.value in ctx.auto_approve:
+                    gates.decide(
+                        ledger,
+                        gate,
+                        True,
+                        notes=f"auto-approved by --auto-approve {gate.value}",
+                        decided_by="machine",
+                    )
+                    ledger.event("gate.auto_approved", gate=gate.value)
+                    index += 1
+                    continue
                 title = gates.GATE_INFO[gate][0]
                 return PipelineOutcome(
                     "awaiting_gate",

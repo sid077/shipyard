@@ -2,8 +2,12 @@
 __pycache__/
 *.pyc
 .pytest_cache/
-projects/*/
-!projects/.gitkeep
+# Run artifacts are committed: they are the record of what the org produced.
+# The generated app is its own git repository, so the outer repo could only
+# store a gitlink - it is pushed separately when a run gets that far.
+projects/*/app/
+projects/*/worktrees/
+projects/*/**/node_modules/
 node_modules/
 .DS_Store
 *.egg-info/

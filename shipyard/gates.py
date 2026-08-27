@@ -71,14 +71,26 @@ def request(ledger: Ledger, gate: Gate, briefing: str) -> GateStatus:
     return record.status
 
 
-def decide(ledger: Ledger, gate: Gate, approved: bool, notes: str = "") -> None:
+def decide(
+    ledger: Ledger,
+    gate: Gate,
+    approved: bool,
+    notes: str = "",
+    decided_by: str = "human",
+) -> None:
     record = ledger.state.gate(gate.value)
     record.status = GateStatus.APPROVED if approved else GateStatus.REJECTED
     record.notes = notes
     record.decided_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    # Recorded so the trail never claims a person read something they did not.
+    record.decided_by = decided_by
     ledger.save()
     ledger.event(
-        "gate.decided", gate=gate.value, status=str(record.status), notes=notes
+        "gate.decided",
+        gate=gate.value,
+        status=str(record.status),
+        notes=notes,
+        decided_by=decided_by,
     )
 
 

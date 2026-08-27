@@ -22,9 +22,14 @@ PACKAGE_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = PACKAGE_ROOT.parent
 
 
-def _env_float(name: str, default: float) -> float:
+def _env_float(name: str) -> float | None:
+    """A spend ceiling, or None for unlimited.
+
+    Ceilings are opt-in: the account's usage window is the real limit, and a
+    dollar estimate that halts a run early is worse than no estimate at all.
+    """
     raw = os.environ.get(name)
-    return float(raw) if raw else default
+    return float(raw) if raw else None
 
 
 def _env_int(name: str, default: int) -> int:
@@ -48,12 +53,14 @@ class Settings:
     build_concurrency: int = field(
         default_factory=lambda: _env_int("SHIPYARD_BUILD_CONCURRENCY", 3)
     )
-    # Hard ceilings. Exceeding one halts the run rather than overrunning.
-    project_budget_usd: float = field(
-        default_factory=lambda: _env_float("SHIPYARD_PROJECT_BUDGET_USD", 150.0)
+    # Optional spend ceilings. Unset by default: the run stops when the
+    # account's usage window is exhausted, which is the truth rather than an
+    # estimate. Set SHIPYARD_PROJECT_BUDGET_USD to reinstate a hard cap.
+    project_budget_usd: float | None = field(
+        default_factory=lambda: _env_float("SHIPYARD_PROJECT_BUDGET_USD")
     )
-    stage_budget_usd: float = field(
-        default_factory=lambda: _env_float("SHIPYARD_STAGE_BUDGET_USD", 40.0)
+    stage_budget_usd: float | None = field(
+        default_factory=lambda: _env_float("SHIPYARD_STAGE_BUDGET_USD")
     )
     # Wall-clock ceiling for a single verification command.
     check_timeout_s: int = field(

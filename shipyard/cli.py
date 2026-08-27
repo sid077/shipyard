@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import re
+import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
@@ -94,11 +96,39 @@ def new(
     console.print(f"Next: [bold]shipyard run {slug}[/bold]")
 
 
+def _git_checkpoint(repo_root: Path, project_dir: Path, slug: str):
+    """Commit the run's artifacts after each stage.
+
+    A container can be reclaimed at any time; without this a long run leaves
+    nothing behind. Failures are reported but never stop the run - losing a
+    checkpoint is bad, losing the stage that produced it is worse.
+    """
+
+    def commit(stage_key: str) -> None:
+        try:
+            subprocess.run(
+                ["git", "add", "-A", str(project_dir)],
+                cwd=repo_root, check=True, capture_output=True,
+            )
+            done = subprocess.run(
+                ["git", "commit", "-q", "-m", f"run({slug}): {stage_key}"],
+                cwd=repo_root, capture_output=True, text=True,
+            )
+            if done.returncode == 0:
+                console.print(f"  [dim]checkpointed {stage_key}[/dim]")
+        except subprocess.CalledProcessError as exc:
+            console.print(f"  [yellow]checkpoint failed:[/yellow] {exc}")
+
+    return commit
+
+
 @app.command()
 def run(
     slug: str,
     until: Annotated[str, typer.Option(help=f"Stop after this stage. One of: {', '.join(STAGE_KEYS)}")] = "",
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate without calling any model.")] = False,
+    auto_approve: Annotated[str, typer.Option(help="Comma-separated gates to approve without review, e.g. G0.")] = "",
+    checkpoint: Annotated[bool, typer.Option("--checkpoint", help="Commit the run's artifacts after each stage.")] = False,
 ) -> None:
     """Run the pipeline from wherever it left off."""
     ledger, project_dir = _open(slug)
@@ -118,22 +148,70 @@ def run(
         console.print(f"\n[bold]graph:[/bold] {'; '.join(problems) if problems else 'valid'}")
         raise typer.Exit(1 if problems else 0)
 
+    gates_to_skip = frozenset(
+        g.strip().upper() for g in auto_approve.split(",") if g.strip()
+    )
+    unknown = gates_to_skip - {g.value for g in Gate}
+    if unknown:
+        console.print(f"[red]unknown gate(s):[/red] {', '.join(sorted(unknown))}")
+        raise typer.Exit(1)
+    if gates_to_skip:
+        console.print(
+            f"[yellow]auto-approving {', '.join(sorted(gates_to_skip))}[/yellow] "
+            f"— recorded as machine-approved, not reviewed"
+        )
+
     runner = SDKRunner(ledger, settings)
     ctx = build_context(project_dir, ledger, runner, settings)
+    ctx.auto_approve = gates_to_skip
+    if checkpoint:
+        ctx.on_stage_done = _git_checkpoint(settings.repo_root, project_dir, slug)
+
     outcome = asyncio.run(run_pipeline(STAGES, ctx, until=until or None))
 
-    colour = {"complete": "green", "awaiting_gate": "cyan", "blocked": "red", "budget_exceeded": "red"}
+    colour = {
+        "complete": "green",
+        "awaiting_gate": "cyan",
+        "blocked": "red",
+        "budget_exceeded": "red",
+        "limit_reached": "yellow",
+    }
     console.print(f"\n[{colour[outcome.status]}]{outcome.status}[/]: {outcome.message}")
-    console.print(f"Spent ${ledger.state.cost_usd:.2f} of ${settings.project_budget_usd:.2f}")
+
+    ceiling = (
+        f" of ${settings.project_budget_usd:.2f}"
+        if settings.project_budget_usd is not None
+        else " (no ceiling set)"
+    )
+    console.print(f"Spent ${ledger.state.cost_usd:.2f}{ceiling}")
+    _print_usage(ledger)
+
     if outcome.status == "awaiting_gate" and outcome.gate:
         console.print(f"\nRead: [bold]{ledger.inbox / (outcome.gate + '.md')}[/bold]")
     raise typer.Exit(0 if outcome.ok else 1)
 
 
+def _print_usage(ledger: Ledger) -> None:
+    usage = ledger.state.usage
+    if not usage.utilization and usage.status == "allowed":
+        return
+    parts = [f"{name} {value:.0%}" for name, value in sorted(usage.utilization.items())]
+    line = " · ".join(parts) or usage.status
+    if usage.resets_at:
+        when = datetime.fromtimestamp(usage.resets_at, timezone.utc)
+        line += f" · resets {when.strftime('%H:%M UTC')}"
+    style = "yellow" if usage.status != "allowed" else "dim"
+    console.print(f"[{style}]Usage: {line}[/{style}]")
+
+
 @app.command()
-def resume(slug: str) -> None:
-    """Continue a run after a gate decision or a fix. Same as `run`."""
-    run(slug, until="", dry_run=False)
+def resume(
+    slug: str,
+    auto_approve: Annotated[str, typer.Option(help="Comma-separated gates to approve without review.")] = "",
+    checkpoint: Annotated[bool, typer.Option("--checkpoint", help="Commit the run's artifacts after each stage.")] = False,
+) -> None:
+    """Continue a run after a gate decision, a fix, or a usage window reset."""
+    run(slug, until="", dry_run=False, auto_approve=auto_approve, checkpoint=checkpoint)
 
 
 @app.command()
@@ -162,7 +240,8 @@ def status(slug: str) -> None:
         rec = state.gates.get(gate.value)
         st = rec.status if rec else GateStatus.NOT_REACHED
         style = {"approved": "green", "pending": "cyan", "rejected": "red"}.get(str(st), "dim")
-        gates.add_row(gate.value, GATE_INFO[gate][0], f"[{style}]{st}[/]")
+        who = f" ({rec.decided_by})" if rec and rec.decided_by else ""
+        gates.add_row(gate.value, GATE_INFO[gate][0], f"[{style}]{st}{who}[/]")
     console.print(gates)
 
     if state.tickets:
@@ -177,6 +256,7 @@ def status(slug: str) -> None:
         console.print(tickets)
 
     console.print(f"\nSpent: [bold]${state.cost_usd:.2f}[/bold]")
+    _print_usage(ledger)
     if state.blocked_reason:
         console.print(f"[red]Blocked:[/red] {state.blocked_reason}")
     pending = sorted(p.name for p in ledger.inbox.glob("*.md")) if ledger.inbox.is_dir() else []
