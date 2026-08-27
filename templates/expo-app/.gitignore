@@ -1,7 +1,9 @@
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
 # dependencies
-node_modules/
+# No trailing slash: the build loop links node_modules into each
+# worktree, and `node_modules/` would not match a symlink.
+node_modules
 
 # Expo
 .expo/

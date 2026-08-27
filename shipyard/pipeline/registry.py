@@ -7,9 +7,10 @@ the orchestrator has no other source of truth.
 from __future__ import annotations
 
 from . import Stage
+from .build import BUILD_STAGES
 from .discovery import DISCOVERY_STAGES
 
-STAGES: list[Stage] = [*DISCOVERY_STAGES]
+STAGES: list[Stage] = [*DISCOVERY_STAGES, *BUILD_STAGES]
 
 STAGE_KEYS: list[str] = [s.key for s in STAGES]
 

@@ -150,7 +150,8 @@ def app_checks(app_dir: Path, timeout: int = 900) -> list[Check]:
     return [
         Check("typecheck", "npm run --silent typecheck", app_dir, timeout),
         Check("lint", "npm run --silent lint", app_dir, timeout),
-        Check("unit", "npm run --silent test -- --ci", app_dir, timeout),
+        Check("format", "npm run --silent format:check", app_dir, timeout),
+        Check("unit", "npm run --silent test -- --ci --silent", app_dir, timeout),
     ]
 
 

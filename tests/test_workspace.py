@@ -100,3 +100,47 @@ def test_create_project_makes_the_standard_tree(tmp_path: Path):
     p = create_project(tmp_path / "projects", "demo")
     for sub in ("research", "product", "design", "arch", "backlog", "qa", "release", "inbox"):
         assert (p / sub).is_dir()
+
+
+def test_linked_dependencies_never_reach_trunk(template: Path, tmp_path: Path):
+    """A symlinked node_modules must not be committed.
+
+    `node_modules/` with a trailing slash matches a directory but not a symlink,
+    so relying on the app's .gitignore would let a worktree commit the link -
+    and the next merge would replace trunk's real dependencies with a link
+    pointing at itself.
+    """
+    repo = AppRepo.from_template(template, tmp_path / "proj" / "app")
+    deps = repo.root / "node_modules"
+    (deps / "left-pad").mkdir(parents=True)
+    (deps / "left-pad" / "index.js").write_text("module.exports = 1;\n")
+
+    repo.add_worktree("T-01")
+    repo.link_dependencies("T-01")
+    worktree = repo.worktree_path("T-01")
+    assert (worktree / "node_modules" / "left-pad" / "index.js").is_file()
+
+    (worktree / "src" / "feature.ts").write_text("export const f = 1;\n")
+    repo.commit_worktree("T-01", "feat(T-01)")
+
+    # The link is not part of the change.
+    assert "node_modules" not in repo.worktree_changed_files("T-01")
+
+    assert repo.merge_ticket("T-01").ok
+    assert deps.is_dir() and not deps.is_symlink(), "trunk lost its real dependencies"
+    assert (deps / "left-pad" / "index.js").is_file()
+
+
+def test_link_dependencies_is_idempotent_and_skips_a_missing_source(
+    template: Path, tmp_path: Path
+):
+    repo = AppRepo.from_template(template, tmp_path / "proj" / "app")
+    repo.add_worktree("T-01")
+
+    repo.link_dependencies("T-01")  # nothing to link yet
+    assert not (repo.worktree_path("T-01") / "node_modules").exists()
+
+    (repo.root / "node_modules").mkdir()
+    repo.link_dependencies("T-01")
+    repo.link_dependencies("T-01")
+    assert (repo.worktree_path("T-01") / "node_modules").is_symlink()

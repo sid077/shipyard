@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path  # noqa: F401
 
 from shipyard.contracts import (
     ADR,
@@ -154,3 +155,19 @@ def backlog() -> Backlog:
                touches=["src/features/paywall/**"], depends_on=["T-01"], requirement_ids=["R-03"],
                acceptance=ac, sensitive=True, estimate="m"),
     ])
+
+
+def full_project(project_dir):
+    """Write every artifact stage 60 requires."""
+    idea().save(project_dir)
+    opportunity().save(project_dir)
+    monetization().save(project_dir)
+    prd().save(project_dir)
+    design().save(project_dir)
+    architecture().save(project_dir)
+    backlog().save(project_dir)
+    (project_dir / "research").mkdir(parents=True, exist_ok=True)
+    (project_dir / "research" / "research.md").write_text("# Research\n")
+    (project_dir / "product").mkdir(parents=True, exist_ok=True)
+    (project_dir / "product" / "prd.md").write_text("# PRD\n")
+    return project_dir

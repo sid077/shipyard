@@ -18,7 +18,7 @@ from rich.table import Table
 from .config import load_settings
 from .contracts import Idea
 from .gates import GATE_INFO, Gate, decide
-from .ledger import GateStatus, Ledger, StageStatus
+from .ledger import GateStatus, Ledger, StageStatus, TicketStatus
 from .pipeline import build_context, run_pipeline
 from .pipeline.registry import STAGE_KEYS, STAGES, validate_graph
 from .roles import ROLES
@@ -164,6 +164,17 @@ def status(slug: str) -> None:
         style = {"approved": "green", "pending": "cyan", "rejected": "red"}.get(str(st), "dim")
         gates.add_row(gate.value, GATE_INFO[gate][0], f"[{style}]{st}[/]")
     console.print(gates)
+
+    if state.tickets:
+        merged = sum(1 for st in state.tickets.values() if st == TicketStatus.MERGED)
+        tickets = Table("Ticket", "Status", box=None)
+        for tid, st in sorted(state.tickets.items()):
+            style = {"merged": "green", "in_progress": "yellow", "blocked": "red"}.get(
+                str(st), "dim"
+            )
+            tickets.add_row(tid, f"[{style}]{st}[/]")
+        console.print(f"\n[bold]Tickets[/bold]  ({merged}/{len(state.tickets)} merged)")
+        console.print(tickets)
 
     console.print(f"\nSpent: [bold]${state.cost_usd:.2f}[/bold]")
     if state.blocked_reason:

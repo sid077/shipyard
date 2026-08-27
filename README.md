@@ -50,6 +50,7 @@ That is why the whole pipeline is testable without spending a cent: swap
 | `s30_design` | `design/design.json` | **G1** |
 | `s40_architecture` | `arch/architecture.json` | |
 | `s50_planning` | `backlog/tickets.json` | |
+| `s60_build` | `app/` on a green trunk, `build/build.json` | |
 
 Every stage ends the same way: artifacts must validate against their contract,
 the stage's checks must exit zero, and the critic must raise no blocking
@@ -60,6 +61,30 @@ halts.
 State lives in `.shipyard/state.json`, rewritten atomically after every step, so
 a crash costs nothing: `shipyard resume <slug>` picks up at the first stage that
 is not done.
+
+## The build loop
+
+Stage 60 is where these systems usually fall over, so the split is strict:
+
+- Each ticket gets its own `git worktree` off trunk, and `dev` roles run in
+  parallel up to `SHIPYARD_BUILD_CONCURRENCY` (default 3). A role's writes are
+  confined to its worktree; it can read the specification but not change it.
+- A ticket lands only after its worktree passes typecheck, lint, formatting and
+  the unit tests, **and** a code review returns no blocking finding. Tickets
+  touching auth, purchases, entitlements or persisted user data also get a
+  security review.
+- Merges are serialized behind one lock, and every merge is re-proved on trunk.
+  A ticket that is green alone but breaks the build once merged is **reverted**,
+  not inherited: trunk is merged into its worktree and the failure handed back.
+- A merge conflict is handed back as a code task, with trunk already merged into
+  the worktree and the markers live — a job agents are good at, unlike
+  repository surgery.
+
+The scaffold step is deterministic code, not an agent task:
+`AppRepo.from_template` copies the golden template, `apply-product.mjs` projects
+the design and monetization artifacts into it, `npm ci` installs, and the whole
+thing must pass its own checks *before* the first ticket — so a broken scaffold
+fails where the cause is obvious rather than blaming the first engineer.
 
 ## The golden template
 
@@ -111,13 +136,13 @@ regardless of which runner is in play.
 ## Tests
 
 ```bash
-pytest                                  # 70 harness tests, no API calls
+pytest                                  # 89 harness tests, no API calls
+SHIPYARD_SLOW_TESTS=1 pytest tests/test_build_real.py   # one real npm build (~2 min)
 cd templates/expo-app && npm ci && npm run verify   # 27 template tests
 ```
 
 ## Status
 
-Stages 00-50 (idea to backlog) are implemented and tested. The build loop
-(stage 60), hardening (70), release packaging (80) and handoff (90) are next;
-the git worktree plumbing they depend on is already in `workspace.py` and
-covered by tests.
+Stages 00-60 are implemented and tested: an idea becomes an opportunity brief, a
+PRD, a design spec, an architecture, a backlog, and then a built app on a green
+trunk. Hardening (70), release packaging (80) and handoff (90) are next.

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .contracts import Verdict, parse_json_blob
+from .contracts import Verdict, coerce_verdict
 from .ledger import Ledger
 from .runner import RoleRequest, Runner
 from .verify import CheckReport
@@ -80,20 +80,8 @@ async def audit(
                 allowed_roots=[project_dir],
             )
         )
-        payload = result.structured
-        if payload is None:
-            try:
-                payload = parse_json_blob(result.text)
-            except ValueError:
-                payload = None
-        if payload is not None:
-            try:
-                verdict = Verdict.model_validate(payload)
-            except Exception as exc:
-                ledger.event(
-                    "critic.invalid", stage=stage, attempt=attempt, error=str(exc)
-                )
-                continue
+        verdict = coerce_verdict(result.structured, result.text)
+        if verdict is not None:
             ledger.event(
                 "critic.verdict",
                 stage=stage,
@@ -101,13 +89,6 @@ async def audit(
                 blocking=len(verdict.blocking),
                 summary=verdict.summary,
             )
-            # A "fail" with no blocking finding is a contradiction; trust the findings.
-            if verdict.verdict == "fail" and not verdict.blocking:
-                return Verdict(
-                    verdict="pass",
-                    summary=verdict.summary,
-                    findings=verdict.findings,
-                )
             return verdict
         ledger.event("critic.unparseable", stage=stage, attempt=attempt)
 

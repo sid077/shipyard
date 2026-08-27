@@ -202,6 +202,54 @@ class AppRepo:
             message=(proc.stderr or proc.stdout).strip(),
         )
 
+    def merge_trunk_into_worktree(self, ticket_id: str) -> MergeResult:
+        """Bring trunk into a ticket's worktree so a `dev` sees integration
+        failures in the same checkout it has been working in."""
+        wt = Git(self.worktree_path(ticket_id))
+        proc = wt.run(
+            "merge", "--no-ff", "-m", f"merge trunk into {ticket_id}", self.trunk, check=False
+        )
+        if proc.returncode == 0:
+            return MergeResult(True, message=wt.head())
+        conflicts = wt.out("diff", "--name-only", "--diff-filter=U").splitlines()
+        return MergeResult(False, conflicts=conflicts, message=(proc.stderr or proc.stdout).strip())
+
+    def link_dependencies(self, ticket_id: str, name: str = "node_modules") -> None:
+        """Point a worktree at trunk's installed dependencies.
+
+        Worktrees share git history but not ignored files, and a fresh checkout
+        with no `node_modules` fails every check for reasons that have nothing
+        to do with the ticket. The link is read-mostly: the architect declares
+        dependencies up front so tickets do not install their own.
+        """
+        source = self.root / name
+        if not source.exists():
+            return
+        worktree = self.worktree_path(ticket_id)
+        target = worktree / name
+        if target.is_symlink() or target.exists():
+            return
+        target.symlink_to(source, target_is_directory=True)
+        # Exclude it in this worktree's own git config rather than trusting the
+        # app's .gitignore. A pattern written `node_modules/` matches a real
+        # directory but not this symlink, and committing the link would replace
+        # trunk's real dependencies with a link to itself on the next merge.
+        self._exclude_in_worktree(worktree, name)
+
+    @staticmethod
+    def _exclude_in_worktree(worktree: Path, name: str) -> None:
+        git = Git(worktree)
+        rel = git.out("rev-parse", "--git-path", "info/exclude")
+        exclude = Path(rel)
+        if not exclude.is_absolute():
+            exclude = worktree / exclude
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        existing = exclude.read_text() if exclude.is_file() else ""
+        if any(line.strip() == name for line in existing.splitlines()):
+            return
+        prefix = "" if existing.endswith("\n") or not existing else "\n"
+        exclude.write_text(f"{existing}{prefix}{name}\n")
+
     def revert_last_merge(self) -> None:
         """Undo the most recent merge commit on trunk."""
         git = self.git

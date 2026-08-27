@@ -64,10 +64,12 @@ def project(tmp_path: Path):
     return settings, project_dir, ledger
 
 
-def drive(settings, project_dir, ledger, scripts, cost=0.0):
+def drive(settings, project_dir, ledger, scripts, cost=0.0, until="s50_planning"):
+    """Run the pipeline. Stops after planning by default: the build loop has
+    its own tests, and it needs npm."""
     runner = ScriptedRunner(scripts, cost_per_call=cost)
     ctx = build_context(project_dir, ledger, runner, settings)
-    return asyncio.run(run_pipeline(STAGES, ctx)), runner
+    return asyncio.run(run_pipeline(STAGES, ctx, until=until)), runner
 
 
 # --------------------------------------------------------------------------

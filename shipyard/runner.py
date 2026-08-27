@@ -28,6 +28,9 @@ class RoleRequest:
     stage: str
     #: Directories this role may write to. Defaults to `[cwd]`.
     allowed_roots: list[Path] = field(default_factory=list)
+    #: Directories the role may read but must not write. Used by the build loop
+    #: so a `dev` confined to one worktree can still read the specification.
+    read_roots: list[Path] = field(default_factory=list)
     resume: str | None = None
     budget_usd: float | None = None
     extra_tools: list[str] = field(default_factory=list)
@@ -76,8 +79,11 @@ class SDKRunner:
         from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
 
         roots = req.roots()
+        # The guard allows writes only to `roots`; `read_roots` widen what the
+        # session can see, not what it can change.
         guard = make_guard(roots, on_deny=lambda tool, why: denials.append(f"{tool}: {why}"))
         tools = list(dict.fromkeys([*spec.tools, *req.extra_tools]))
+        visible = [*roots, *req.read_roots]
         return ClaudeAgentOptions(
             system_prompt=self._system_prompt(spec),
             model=spec.model,
@@ -87,7 +93,7 @@ class SDKRunner:
             disallowed_tools=spec.disallowed,
             permission_mode="acceptEdits",
             cwd=str(req.cwd),
-            add_dirs=[str(r) for r in roots if Path(r) != Path(req.cwd)],
+            add_dirs=[str(r) for r in visible if Path(r) != Path(req.cwd)],
             max_turns=spec.max_turns,
             max_budget_usd=req.budget_usd or spec.budget_usd,
             # Hermetic: no user/project settings, CLAUDE.md or plugins leak in.

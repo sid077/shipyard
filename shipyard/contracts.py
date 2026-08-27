@@ -418,6 +418,35 @@ class Verdict(BaseModel):
 # --------------------------------------------------------------------------
 
 
+class TicketOutcome(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    status: Literal["merged", "blocked"]
+    attempts: int = 1
+    integration_attempts: int = 1
+    blocking_findings: int = 0
+    commit: str | None = None
+    note: str = ""
+
+
+class BuildReport(Artifact):
+    rel_path: ClassVar[str] = "build/build.json"
+
+    app_path: str = "app"
+    trunk_commit: str
+    tickets: list[TicketOutcome] = Field(min_length=1)
+    checks: str = ""
+
+    @property
+    def merged(self) -> list[TicketOutcome]:
+        return [t for t in self.tickets if t.status == "merged"]
+
+    @property
+    def blocked(self) -> list[TicketOutcome]:
+        return [t for t in self.tickets if t.status == "blocked"]
+
+
 class HardeningReport(Artifact):
     rel_path: ClassVar[str] = "qa/hardening.json"
 
@@ -452,6 +481,28 @@ class ReleaseManifest(Artifact):
     runbook_path: str = "release/RUNBOOK.md"
 
 
+def coerce_verdict(structured: Any, text: str) -> Verdict | None:
+    """Read a `Verdict` out of a role result, or None if it did not produce one.
+
+    Used by every role that judges rather than produces: the critic, the code
+    reviewer and the security reviewer all answer in the same shape.
+    """
+    payload = structured
+    if payload is None:
+        try:
+            payload = parse_json_blob(text)
+        except ValueError:
+            return None
+    try:
+        verdict = Verdict.model_validate(payload)
+    except Exception:
+        return None
+    # A "fail" with nothing blocking is a contradiction; the findings win.
+    if verdict.verdict == "fail" and not verdict.blocking:
+        return Verdict(verdict="pass", summary=verdict.summary, findings=verdict.findings)
+    return verdict
+
+
 #: Every artifact the pipeline knows how to validate, by rel_path.
 ARTIFACTS: dict[str, type[Artifact]] = {
     cls.rel_path: cls
@@ -463,6 +514,7 @@ ARTIFACTS: dict[str, type[Artifact]] = {
         DesignSpec,
         Architecture,
         Backlog,
+        BuildReport,
         HardeningReport,
         ReleaseManifest,
     )
