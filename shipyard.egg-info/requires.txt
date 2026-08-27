@@ -1,0 +1,8 @@
+claude-agent-sdk>=0.2.145
+pydantic>=2.7
+typer>=0.12
+rich>=13.7
+
+[dev]
+pytest>=8.0
+pytest-asyncio>=0.23

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shipyard"
+version = "0.1.0"
+description = "An AI agent organization that researches, designs, builds and packages deployable mobile apps."
+requires-python = ">=3.11"
+dependencies = [
+    "claude-agent-sdk>=0.2.145",
+    "pydantic>=2.7",
+    "typer>=0.12",
+    "rich>=13.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+shipyard = "shipyard.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["shipyard*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
