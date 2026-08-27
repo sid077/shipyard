@@ -70,7 +70,8 @@ class RoleRequest:
 @dataclass
 class RoleResult:
     role: str
-    text: str
+    #: Accumulated as the session streams, so it starts empty.
+    text: str = ""
     cost_usd: float = 0.0
     session_id: str | None = None
     terminal_reason: str = "unknown"

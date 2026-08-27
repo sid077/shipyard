@@ -105,6 +105,15 @@ class Stage(ABC):
                 )
         return problems
 
+    def gate_override(self, ctx: StageContext) -> str:
+        """A reason this stage's gate must not be auto-approved.
+
+        `--auto-approve` is a convenience for gates the operator expects to be
+        a formality. It must never be able to steamroll the very finding the
+        gate exists to act on.
+        """
+        return ""
+
     def cross_validate(self, ctx: StageContext) -> list[str]:
         """Checks that span several of this stage's artifacts.
 
@@ -317,6 +326,19 @@ async def run_pipeline(
             if state != GateStatus.APPROVED:
                 gates.request(ledger, gate, stage.briefing(ctx))
                 if gate.value in ctx.auto_approve:
+                    veto = stage.gate_override(ctx)
+                    if veto:
+                        ledger.event(
+                            "gate.auto_approve_refused", gate=gate.value, reason=veto
+                        )
+                        return PipelineOutcome(
+                            "awaiting_gate",
+                            f"gate {gate.value} will not be auto-approved: {veto} "
+                            f"See {ledger.inbox / (gate.value + '.md')} and decide.",
+                            stage.key,
+                            gate.value,
+                            ran,
+                        )
                     gates.decide(
                         ledger,
                         gate,

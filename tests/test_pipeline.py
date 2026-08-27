@@ -426,3 +426,42 @@ def test_each_completed_stage_can_be_checkpointed(project):
     asyncio.run(run_pipeline(STAGES, ctx, until="s50_planning"))
 
     assert checkpointed == ["s00_intake", "s10_research"], "one hook per completed stage"
+
+
+def test_auto_approve_cannot_steamroll_a_no_go(project):
+    """The gate exists to act on the research; a convenience flag must not
+    be able to skip past the very finding it exists for."""
+    settings, project_dir, ledger = project
+
+    def pessimist(req: RoleRequest) -> str:
+        brief = fx.opportunity()
+        brief.recommendation = "no-go"
+        brief.recommendation_rationale = "Four shipped competitors at $0.99. Spend the weeks elsewhere."
+        brief.save(req.cwd)
+        (req.cwd / "research" / "research.md").write_text("# Research\n")
+        return "wrote it"
+
+    runner = ScriptedRunner(happy_scripts() | {"analyst": pessimist})
+    ctx = build_context(project_dir, ledger, runner, settings)
+    ctx.auto_approve = frozenset({"G0"})
+
+    outcome = asyncio.run(run_pipeline(STAGES, ctx, until="s50_planning"))
+
+    assert outcome.status == "awaiting_gate" and outcome.gate == "G0"
+    assert "NO-GO" in outcome.message
+    assert ledger.state.gate("G0").status == GateStatus.PENDING
+    assert ledger.state.gate("G0").decided_by is None
+    # It must not have gone on to spec a product the research rejected.
+    assert not [c for c in runner.calls if c.role == "pm"]
+
+
+def test_auto_approve_still_applies_when_the_analyst_says_go(project):
+    settings, project_dir, ledger = project
+    runner = ScriptedRunner(happy_scripts())
+    ctx = build_context(project_dir, ledger, runner, settings)
+    ctx.auto_approve = frozenset({"G0"})
+
+    outcome = asyncio.run(run_pipeline(STAGES, ctx, until="s50_planning"))
+
+    assert outcome.gate == "G1"
+    assert ledger.state.gate("G0").decided_by == "machine"

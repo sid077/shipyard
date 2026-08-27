@@ -154,6 +154,21 @@ class Research(Stage):
             )
         )
 
+    def gate_override(self, ctx: StageContext) -> str:
+        """Refuse to auto-approve away the analyst's own conclusion.
+
+        A confident no-go early is the most valuable thing this stage produces.
+        Letting a convenience flag skip past it would spend the studio's money
+        on exactly the product the research said not to build.
+        """
+        opportunity = Opportunity.load(ctx.project_dir)
+        if opportunity.recommendation == "go":
+            return ""
+        return (
+            f"the analyst recommends {opportunity.recommendation.upper()} - "
+            f"{opportunity.recommendation_rationale.split('.')[0]}."
+        )
+
     def checks(self, ctx: StageContext) -> list[Check]:
         return [
             files_exist(

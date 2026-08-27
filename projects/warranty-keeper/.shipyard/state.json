@@ -2,8 +2,8 @@
   "slug": "warranty-keeper",
   "title": "Warranty Keeper",
   "created_at": "2026-08-27T18:39:17+00:00",
-  "updated_at": "2026-08-27T18:39:23+00:00",
-  "current_stage": "s00_intake",
+  "updated_at": "2026-08-27T18:44:55+00:00",
+  "current_stage": "s10_research",
   "stages": {
     "s00_intake": {
       "status": "done",
@@ -11,17 +11,27 @@
       "started_at": "2026-08-27T18:39:23+00:00",
       "finished_at": "2026-08-27T18:39:23+00:00",
       "note": "no checks run"
+    },
+    "s10_research": {
+      "status": "running",
+      "attempts": 1,
+      "started_at": "2026-08-27T18:39:23+00:00",
+      "finished_at": null,
+      "note": ""
     }
   },
   "gates": {},
   "tickets": {},
-  "cost_usd": 0.0,
+  "cost_usd": 1.802951,
   "usage": {
     "status": "allowed",
-    "window": null,
-    "resets_at": null,
-    "utilization": {},
-    "observed_at": null
+    "window": "five_hour",
+    "resets_at": 1787872200,
+    "utilization": {
+      "five_hour": 0.68,
+      "seven_day": 0.17
+    },
+    "observed_at": "2026-08-27T18:44:55+00:00"
   },
   "blocked_reason": null
 }

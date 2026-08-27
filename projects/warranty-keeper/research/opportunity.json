@@ -1,0 +1,169 @@
+{
+  "problem": "People buy warrantied goods, lose the receipt, and forget the coverage window, so they pay for repairs they were entitled to for free. The underlying frustration is documented: a Consumer Action survey found 63% of smartphone owners knew their device had a manufacturer warranty but did not know how to file a claim, and 75% did not know where to escalate an unresolved claim; separate industry survey reporting says 62% of consumers hit friction resolving warranty claims and 14% never resolve them. The problem is real. What is not established is that the bottleneck is receipt storage rather than claim navigation, or that consumers will install and pay for a manual-entry app to solve it.",
+  "target_user": "Homeowners and renters aged roughly 30-55 who buy several warrantied durables a year (appliances, power tools, electronics) and who currently do nothing, or keep a shoebox/photo-roll/spreadsheet. Under the stated constraints the app additionally targets the privacy-motivated subset who specifically want no account and no cloud. That subset is real but small, and at least five shipped apps already serve it.",
+  "market_note": "There is no reliable public figure for the consumer warranty-tracking app market, and any TAM built from 'global consumer electronics spend' would be a fabrication. The honest proxy is observed install volume in the category, which is the number that actually predicts revenue. AppBrain figures for Google Play: 'Warranty Keeper' (com.warranty_keeper), one of the oldest and best-established entrants, has 10,000+ lifetime installs, 320 ratings, 4.32 stars, and roughly 260 installs in the last 30 days despite being 100% free with unlimited items and cloud backup. 'Warranty Tracker & Receipts' (com.garanti.takip) has 130 lifetime installs since December 2024. 'Warranty Reminder Book' has ~2,000 lifetime installs and 6 in the last 30 days. On iOS, multiple warranty tracker listings, including one live since 2023 (id6449024145), still show 'not enough ratings to display an overview', i.e. fewer than five ratings after years on the store. The only warranty-adjacent app with real volume is a manufacturer's own 'Warranty Registration' app at ~740,000 installs and ~280/day, which gets its distribution from the seller at point of purchase, not from app store discovery. Read together: total consumer demand reaching this category through app store search is in the low thousands of installs per month worldwide, split across dozens of near-identical apps.",
+  "competitors": [
+    {
+      "name": "Warranty Wallet (iOS)",
+      "url": "https://apps.apple.com/us/app/warranty-wallet/id6747629252",
+      "pricing": "Free with a $1.99 one-time premium unlock; no subscription",
+      "strengths": [
+        "Ships the exact proposed product: works offline and does not request internet access at all",
+        "One-time unlock at a price point users in this category will actually pay",
+        "Free tier then paid unlock, the same funnel the brief proposes"
+      ],
+      "weaknesses": [
+        "No meaningful ratings volume, so no evidence it has found an audience",
+        "No cross-device backup, which is the top complaint pattern in the category"
+      ]
+    },
+    {
+      "name": "Drawer: Warranty & Receipt (iOS)",
+      "url": "https://apps.apple.com/us/app/-/id6759810569",
+      "pricing": "$0.99 paid up front",
+      "strengths": [
+        "Explicitly no internet connection required; no data, invoices or photos leave the device",
+        "Covers electronics, home appliances and valuables, the same scope as the brief",
+        "Sets the observed floor price for this exact feature set at under a dollar"
+      ],
+      "weaknesses": [
+        "Paid-up-front with no free tier limits discovery",
+        "Negligible review footprint"
+      ]
+    },
+    {
+      "name": "Warrantly - Warranty Tracker (iOS + Android, TechBasi LLC)",
+      "url": "https://apps.apple.com/us/app/warrantly-warranty-tracker/id6758876669",
+      "pricing": "Free for up to 10 warranties; Pro is a single lifetime one-time purchase (price not shown on the listing summary), no recurring fees",
+      "strengths": [
+        "Free-tier-then-lifetime-unlock model identical to the brief, already validated in market",
+        "Receipt photos, PDFs, serial numbers, and configurable alerts at 1/3/7/14/30/60/90 days before expiry",
+        "Optional cloud sync via Apple or Google sign-in, closing the backup gap the brief leaves open",
+        "Ships both platforms"
+      ],
+      "weaknesses": [
+        "Requires sign-in for the sync feature, so the pure no-account experience is only partial",
+        "Apple App Store shows it has not received enough ratings or reviews to display an overview"
+      ]
+    },
+    {
+      "name": "Warranty Keeper (Android, com.warranty_keeper)",
+      "url": "https://play.google.com/store/apps/details?id=com.warranty_keeper",
+      "pricing": "100% free, unlimited items, no paywall",
+      "strengths": [
+        "Best-established entrant in the niche: 10,000+ installs, 4.32 stars from 320 ratings, still updated (April 2026)",
+        "Unlimited items and cloud backup at zero cost sets the consumer price anchor at free",
+        "Exact name collision with the proposed product, which it owns on Play Store search"
+      ],
+      "weaknesses": [
+        "Reviewers complain it does not scan documents or auto-detect product and warranty details, so everything is manual entry",
+        "Cloud-only storage, no offline/privacy story",
+        "Despite being free and unlimited it draws only ~260 installs per month, which is the demand ceiling evidence"
+      ]
+    },
+    {
+      "name": "Warranty Keeper: Receipt Log (iOS)",
+      "url": "https://apps.apple.com/ca/app/warranty-keeper-receipt-log/id6790164891",
+      "pricing": "$2.99/month, $12.99/year, or $24.99 lifetime one-time",
+      "strengths": [
+        "Establishes the observed top of the price band, and proves someone is at least trying to charge $24.99 lifetime",
+        "Another exact name collision with the proposed product"
+      ],
+      "weaknesses": [
+        "Subscription-first pricing in a category where competitors charge $0.99 one-time",
+        "No visible traction"
+      ]
+    },
+    {
+      "name": "Centriq (dead, shut down 31 January 2025)",
+      "url": "https://diyproject.ai/compare/centriq",
+      "pricing": "Was free 'Beginner' plus paid tiers at $17.95, $29.95, $59.95 and $99.95/year before shutdown",
+      "strengths": [
+        "The most credible product this space has produced: snap a model label to pull manuals, recalls, parts, plus receipts, warranties and reminders",
+        "Won the National Association of Home Builders 'Game Changer' award and ran for nearly a decade"
+      ],
+      "weaknesses": [
+        "Shut down its consumer product and deleted all user data in January 2025, citing the challenges of the home services market",
+        "A funded, awarded, feature-rich incumbent with real distribution could not sustain this category; that is the loudest single datapoint in this brief"
+      ]
+    },
+    {
+      "name": "Sortly (home/business inventory, adjacent)",
+      "url": "https://www.capterra.com/p/169199/Sortly-Pro/",
+      "pricing": "Free tier capped at 100 unique items and 1 user; paid tiers reported at $49/mo (Advanced), $149/mo (Ultra), $299/mo (Premium)",
+      "strengths": [
+        "Photos, serial numbers, receipts and warranties in one place, with a free tier that covers essentially every household",
+        "Real business revenue, so it is durable and will not disappear"
+      ],
+      "weaknesses": [
+        "Aimed at businesses and teams; overkill and cluttered for a consumer tracking six appliances",
+        "Requires an account and is cloud-based"
+      ]
+    }
+  ],
+  "wedge": "There isn't one. I looked for a defensible wedge under the stated constraints and could not substantiate one. The brief's three differentiators - offline-only, no account, one-time purchase - are not a wedge because they are already the shipped, marketed positioning of at least four competitors: Warranty Wallet ($1.99 one-time, does not request internet access), Drawer ($0.99, nothing leaves the device), KeepSlip (offline-first receipt organiser, local storage, no cloud uploads), and 'Warranty Tracker & Reminder' on Play (explicitly an offline app). The closest thing to a genuine gap I found is that the most common substantive review complaint in the category is manual data entry ('doesn't scan documents or automatically detect product and warranty details'), which could be closed offline using on-device OCR. But that removes a complaint from an audience that is not showing up in the first place; it does not create demand. The demand evidence, not the feature evidence, is what sinks this.",
+  "differentiators": [
+    "On-device OCR of the receipt (merchant, date, total) using platform vision APIs, which would answer the single most common review complaint without breaking the offline constraint. KeepSlip already advertises a smart scanner that detects merchant name and purchase date locally, so this is a parity feature at best, not a lead.",
+    "Genuinely zero-permission, zero-account install with no internet capability declared at all, which is legible on the store listing as a privacy claim. Warranty Wallet already makes this exact claim, so the differentiation is execution and design quality rather than capability.",
+    "A one-time unlock rather than the $2.99/month subscriptions some entrants are attempting. This is real but the observed clearing price is $0.99 to $1.99, not $24.99, which caps revenue rather than creating advantage."
+  ],
+  "risks": [
+    {
+      "description": "Category demand appears to be a few thousand installs per month worldwide across all entrants. The most established free-and-unlimited app in the niche draws ~260 installs/month; a two-year-old iOS listing has fewer than five ratings. There is no evidence of an audience large enough to matter to the studio.",
+      "severity": "high",
+      "mitigation": "Before writing code, spend two days on a demand probe rather than six weeks on a build: run a small paid App Store search-ads test against 'warranty tracker' and 'receipt keeper' keywords pointing at a landing page, and measure tap-through and email capture. If cost per interested user exceeds roughly $1, the unit economics never close against a $1.99 unlock. There is no in-app mitigation for absent demand."
+    },
+    {
+      "description": "The exact proposed feature set already exists at $0.99 to $1.99 one-time from multiple shipped apps, so the price ceiling is set by competitors, not by us. At $1.99 with platform fees, the studio nets roughly $1.40 per sale and would need tens of thousands of paying users to justify six weeks plus ongoing maintenance.",
+      "severity": "high",
+      "mitigation": "None available within the brief. Charging more than the observed band requires a capability competitors lack, and the constraints (no backend, no account) rule out the capabilities that would justify it."
+    },
+    {
+      "description": "The offline/no-account constraint directly collides with the most damaging failure mode reviewers report in this category. A Warranty-Tracker reviewer described losing over 20 saved entries and all stored receipts overnight, then getting no response from the developer. With no account and no cloud, a phone loss, an OS restore, or a corrupted local store destroys years of a user's records, and the store review will say so.",
+      "severity": "high",
+      "mitigation": "Ship encrypted local export to a user-chosen file destination (Files/Drive) plus an aggressive backup prompt from day one, and make the export the primary onboarding step rather than a settings-screen afterthought. This does not fully solve it: users who never export still lose everything."
+    },
+    {
+      "description": "Severe ASO problem. 'Warranty Keeper' is already taken by a live Google Play app with 10,000+ installs and 320 ratings, and by at least two iOS listings ('Warranty Keeper App', 'Warranty Keeper: Receipt Log'). A new entrant under this name ranks below incumbents for its own brand term, in a category where organic search is the only free distribution channel available.",
+      "severity": "medium",
+      "mitigation": "Rename before any store submission. This is cheap to fix but it removes the app's only realistic acquisition channel from the plan unless a distinct, searchable name is chosen early."
+    },
+    {
+      "description": "Structural retention problem. The app is opened at purchase and then not again for two to five years until something breaks. There is no habit loop, no engagement surface, and nothing that drives word of mouth, so paid acquisition can never be amortised over a lifetime of usage.",
+      "severity": "medium",
+      "mitigation": "Attach it to a higher-frequency behaviour, such as return-window tracking (days, not years) or general receipt/expense capture, which gives a weekly reason to open the app. That is a different product than the one in the brief."
+    },
+    {
+      "description": "The most credible product this category has produced, Centriq, shut down its consumer app on 31 January 2025 after nearly a decade, an industry award, and a pivot to subscriptions. That is a strong prior that consumer willingness to pay here does not cover the cost of serving it.",
+      "severity": "medium",
+      "mitigation": "Treat Centriq's post-mortem as the base rate. If the studio proceeds anyway, cap the investment at a two-week build rather than six, and treat it as a portfolio filler rather than a bet."
+    }
+  ],
+  "effort_estimate_weeks": 3.5,
+  "recommendation": "no-go",
+  "recommendation_rationale": "The build is not the problem: camera capture, a local database, a date picker, local notifications and a single non-consumable IAP is comfortably a 3 to 4 week job for this team, which is why it looks attractive. The problem is that the market has already answered this question. At least four shipped apps offer precisely the proposed product - offline, no account, local-only, one-time unlock - at $0.99 to $1.99, so the studio's stated differentiators are the competition's existing marketing copy, and the price ceiling is set at roughly $1.40 net per sale. Meanwhile the demand signal is close to absent: the best-established app in the niche is free with unlimited items and cloud backup and still pulls only ~260 installs a month, a two-year-old iOS competitor has fewer than five ratings, another Play entrant has 130 lifetime installs, and Centriq - the one genuinely well-built, award-winning product this category produced - shut down and deleted user data in January 2025. Worse, the two constraints that define the brief work against the product: no account means the app is one lost phone away from the category's most common one-star review (a user losing 20+ entries with no recovery), and 'photograph a receipt then type it in' is the exact complaint reviewers already level at the free incumbent. The name is also unavailable on both stores. The only warranty app with real volume in this research is a manufacturer's own registration app at ~740,000 installs, which proves the distribution for this problem lives at the point of sale, not in app store search - and the studio cannot reach that without a backend, retailer relationships, and far more than six weeks. I did not find a pivot inside these constraints that I would stake the studio's money on; the nearest adjacent shapes (return-window tracking, general receipt capture, or B2B warranty registration) are different products with different constraints and deserve their own brief rather than a rescue of this one. Spend the six weeks elsewhere.",
+  "sources": [
+    "https://play.google.com/store/apps/details?id=com.warranty_keeper&hl=en_US",
+    "https://www.appbrain.com/app/warranty-keeper/com.warranty_keeper",
+    "https://www.appbrain.com/app/warranty-tracker-receipts/com.garanti.takip",
+    "https://www.appbrain.com/app/warranty-reminder-book/com.ginfotech.warrantyreminder",
+    "https://www.appbrain.com/app/warranty-registration/com.titancustomerwarranty",
+    "https://apps.apple.com/us/app/warranty-wallet/id6747629252",
+    "https://apps.apple.com/us/app/-/id6759810569",
+    "https://apps.apple.com/us/app/warrantly-warranty-tracker/id6758876669",
+    "https://apps.apple.com/us/app/keepslip/id6757175734",
+    "https://apps.apple.com/ca/app/warranty-keeper-receipt-log/id6790164891",
+    "https://apps.apple.com/us/app/warranty-tracker-and-keeper/id6449024145",
+    "https://apps.apple.com/us/app/warranty-tracker-manager/id6449924260",
+    "https://apps.apple.com/us/app/warranty-tracker/id1516388207",
+    "https://play.google.com/store/apps/details?id=com.lozsolutiont.returntracker",
+    "https://play.google.com/store/apps/details?id=com.primeapps.warrentytracker&hl=en_US",
+    "https://diyproject.ai/compare/centriq",
+    "https://dib.io/blog/centriq-shutting-down-alternative",
+    "https://www.capterra.com/p/169199/Sortly-Pro/",
+    "https://help.sortly.com/hc/en-us/articles/360035774271-Sortly-Pricing-Plan-Information",
+    "https://www.consumer-action.org/press/articles/survey-smartphone-owners-in-dark-about-warranty-claims-process",
+    "https://apps.shopify.com/dyrect-warranty-registrations",
+    "https://techpp.com/2024/05/17/warranty-tracker-apps/"
+  ]
+}
