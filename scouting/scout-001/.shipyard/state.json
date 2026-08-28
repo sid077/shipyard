@@ -1,0 +1,19 @@
+{
+  "slug": "scout-001",
+  "title": "Opportunity scouting",
+  "created_at": "2026-08-27T18:54:25+00:00",
+  "updated_at": "2026-08-27T18:54:25+00:00",
+  "current_stage": null,
+  "stages": {},
+  "gates": {},
+  "tickets": {},
+  "cost_usd": 0.0,
+  "usage": {
+    "status": "allowed",
+    "window": null,
+    "resets_at": null,
+    "utilization": {},
+    "observed_at": null
+  },
+  "blocked_reason": null
+}

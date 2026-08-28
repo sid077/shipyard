@@ -1,0 +1,12 @@
+{"ts": "2026-08-28T05:33:43+00:00", "mono": 108.302, "kind": "project.created", "slug": "scout-002", "title": "Opportunity scouting"}
+{"ts": "2026-08-28T05:33:45+00:00", "mono": 110.274, "kind": "role.started", "stage": "scout", "role": "analyst", "model": "claude-opus-5", "cwd": "/home/user/shipyard/scouting/scout-002"}
+{"ts": "2026-08-28T05:38:38+00:00", "mono": 403.514, "kind": "usage.warning", "stage": "scout", "window": "five_hour", "utilization": {"five_hour": 0.91, "seven_day": 0.27}, "resets_at": 1787913000}
+{"ts": "2026-08-28T05:38:40+00:00", "mono": 404.745, "kind": "usage.warning", "stage": "scout", "window": "five_hour", "utilization": {"five_hour": 0.92, "seven_day": 0.27}, "resets_at": 1787913000}
+{"ts": "2026-08-28T05:38:41+00:00", "mono": 405.915, "kind": "usage.warning", "stage": "scout", "window": "five_hour", "utilization": {"five_hour": 0.93, "seven_day": 0.27}, "resets_at": 1787913000}
+{"ts": "2026-08-28T05:38:43+00:00", "mono": 407.643, "kind": "usage.warning", "stage": "scout", "window": "five_hour", "utilization": {"five_hour": 0.93, "seven_day": 0.28}, "resets_at": 1787913000}
+{"ts": "2026-08-28T05:38:43+00:00", "mono": 408.405, "kind": "usage.warning", "stage": "scout", "window": "five_hour", "utilization": {"five_hour": 0.95, "seven_day": 0.28}, "resets_at": 1787913000}
+{"ts": "2026-08-28T05:38:49+00:00", "mono": 413.609, "kind": "usage.warning", "stage": "scout", "window": "five_hour", "utilization": {"five_hour": 0.96, "seven_day": 0.28}, "resets_at": 1787913000}
+{"ts": "2026-08-28T05:38:52+00:00", "mono": 416.642, "kind": "usage.warning", "stage": "scout", "window": "five_hour", "utilization": {"five_hour": 0.97, "seven_day": 0.28}, "resets_at": 1787913000}
+{"ts": "2026-08-28T05:39:20+00:00", "mono": 445.449, "kind": "role.failed", "stage": "scout", "role": "analyst", "error": "Claude Code returned an error result: You've hit your session limit \u00b7 resets 10:30am (UTC) (exit code: 1)"}
+{"ts": "2026-08-28T05:39:20+00:00", "mono": 445.449, "kind": "usage.limit_reached", "stage": "scout", "role": "analyst", "window": "five_hour", "resets_at": 1787913000}
+{"ts": "2026-08-28T05:39:20+00:00", "mono": 445.449, "kind": "role.finished", "stage": "scout", "role": "analyst", "cost_usd": 8.57988175, "tool_calls": 236, "terminal_reason": "exception: ResultError: Claude Code returned an error result: You've hit your session limit \u00b7 resets 10:30am (UTC) (exit code: 1)", "is_error": true, "denials": []}

@@ -13,4 +13,5 @@ node_modules/
 *.egg-info/
 build/
 dist/
-scouting/
+# Scouting output is the record of what the researcher found - keep it.
+*.log

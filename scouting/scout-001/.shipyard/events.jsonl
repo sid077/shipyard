@@ -1,0 +1,11 @@
+{"ts": "2026-08-27T18:54:25+00:00", "mono": 1425.302, "kind": "project.created", "slug": "scout-001", "title": "Opportunity scouting"}
+{"ts": "2026-08-27T18:54:26+00:00", "mono": 1426.037, "kind": "role.started", "stage": "scout", "role": "analyst", "model": "claude-opus-5", "cwd": "/home/user/shipyard/scouting/scout-001"}
+{"ts": "2026-08-27T18:55:59+00:00", "mono": 1518.863, "kind": "usage.warning", "stage": "", "window": "five_hour", "utilization": {"five_hour": 0.9, "seven_day": 0.19}, "resets_at": 1787872200}
+{"ts": "2026-08-27T18:56:02+00:00", "mono": 1521.974, "kind": "usage.warning", "stage": "", "window": "five_hour", "utilization": {"five_hour": 0.9, "seven_day": 0.19}, "resets_at": 1787872200}
+{"ts": "2026-08-27T18:56:06+00:00", "mono": 1526.532, "kind": "usage.warning", "stage": "", "window": "five_hour", "utilization": {"five_hour": 0.91, "seven_day": 0.19}, "resets_at": 1787872200}
+{"ts": "2026-08-27T18:56:10+00:00", "mono": 1530.719, "kind": "usage.warning", "stage": "", "window": "five_hour", "utilization": {"five_hour": 0.92, "seven_day": 0.19}, "resets_at": 1787872200}
+{"ts": "2026-08-27T18:56:12+00:00", "mono": 1532.34, "kind": "usage.warning", "stage": "", "window": "five_hour", "utilization": {"five_hour": 0.93, "seven_day": 0.2}, "resets_at": 1787872200}
+{"ts": "2026-08-27T18:56:12+00:00", "mono": 1532.542, "kind": "usage.warning", "stage": "", "window": "five_hour", "utilization": {"five_hour": 0.94, "seven_day": 0.2}, "resets_at": 1787872200}
+{"ts": "2026-08-27T18:56:20+00:00", "mono": 1540.607, "kind": "usage.warning", "stage": "", "window": "five_hour", "utilization": {"five_hour": 0.95, "seven_day": 0.2}, "resets_at": 1787872200}
+{"ts": "2026-08-27T18:56:25+00:00", "mono": 1545.605, "kind": "usage.warning", "stage": "", "window": "five_hour", "utilization": {"five_hour": 0.96, "seven_day": 0.2}, "resets_at": 1787872200}
+{"ts": "2026-08-27T18:56:30+00:00", "mono": 1550.465, "kind": "usage.warning", "stage": "", "window": "five_hour", "utilization": {"five_hour": 0.99, "seven_day": 0.2}, "resets_at": 1787872200}
